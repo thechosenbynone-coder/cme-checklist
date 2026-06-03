@@ -1,0 +1,138 @@
+// Prisma Schema - cme-checklist
+// Seguindo padrão do logistica_pessoal_app_portal
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StatusItem {
+  OK
+  PENDENTE
+  NAO_APLICAVEL
+}
+
+enum StatusInspecao {
+  EM_ANDAMENTO
+  CONCLUIDA
+  VALIDADA
+  CANCELADA
+}
+
+enum TipoInspecao {
+  PRE_EMBARQUE
+  OPERACIONAL
+  RETORNO_EMBARQUE
+}
+
+model User {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  funcao    String?  // Operador, Supervisor, Gestor, Compras, Admin
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inspecoesCriadas     Inspecao[] @relation("InspecaoCriadaPor")
+  respostasRegistradas RespostaItem[] @relation("RespostaRegistradaPor")
+}
+
+model Equipamento {
+  id          String   @id @default(uuid())
+  codigo      String   @unique
+  nome        String
+  tipo        String   // After Cooler, Compressor, etc.
+  localizacao String?
+  status      String?  // Ativo, Manutenção, etc.
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  inspecoes Inspecao[]
+}
+
+model ChecklistModelo {
+  id          String   @id @default(uuid())
+  nome        String
+  tipoEquipamento String
+  versao      Int      @default(1)
+  ativo       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  itens ItemChecklist[]
+}
+
+model ItemChecklist {
+  id          String   @id @default(uuid())
+  modeloId    String
+  secao       String   // Ex: "INSPEÇÃO GERAL", "SISTEMA PNEUMÁTICO", etc.
+  descricao   String
+  ordem       Int
+  obrigatorio Boolean  @default(true)
+
+  modelo ChecklistModelo @relation(fields: [modeloId], references: [id], onDelete: Cascade)
+  respostas  RespostaItem[]
+}
+
+model Inspecao {
+  id            String   @id @default(uuid())
+  equipamentoId String
+  tipo          TipoInspecao
+  data          DateTime @default(now())
+  responsavelGeral String?  // Nome do responsável principal
+  localizacao   String?
+  status        StatusInspecao @default(EM_ANDAMENTO)
+  observacoesGerais String?
+  createdById   String?
+
+  equipamento Equipamento @relation(fields: [equipamentoId], references: [id])
+  createdBy   User?       @relation("InspecaoCriadaPor", fields: [createdById], references: [id])
+  respostas   RespostaItem[]
+  materiais   MaterialUtilizado[]
+
+  @@index([equipamentoId, data])
+}
+
+model RespostaItem {
+  id          String   @id @default(uuid())
+  inspecaoId  String
+  itemId      String
+  status      StatusItem
+  observacao  String?
+  responsavel String?  // Quem executou aquela tarefa específica (elétrica, pintura, etc.)
+  createdById String?
+
+  inspecao Inspecao     @relation(fields: [inspecaoId], references: [id], onDelete: Cascade)
+  item     ItemChecklist @relation(fields: [itemId], references: [id])
+  createdBy User?       @relation("RespostaRegistradaPor", fields: [createdById], references: [id])
+
+  @@unique([inspecaoId, itemId])
+}
+
+model Material {
+  id          String   @id @default(uuid())
+  codigo      String?  @unique
+  descricao   String
+  unidade     String   // UN, KG, M, etc.
+  categoria   String?
+  ativo       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  utilizadoEm MaterialUtilizado[]
+}
+
+model MaterialUtilizado {
+  id          String   @id @default(uuid())
+  inspecaoId  String
+  materialId  String
+  quantidade  Float
+  observacao  String?
+
+  inspecao Inspecao @relation(fields: [inspecaoId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id])
+}
+
+// Futuro: Certificados, Fotos, Assinaturas, etc.
