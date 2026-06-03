@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  @apply bg-slate-50 text-slate-900;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* Permitir seleção em inputs e observações */
+input, textarea {
+  user-select: text;
+}
