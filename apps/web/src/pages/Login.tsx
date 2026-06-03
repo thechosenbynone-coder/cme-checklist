@@ -46,58 +46,50 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Background gradients decorativos */}
-      <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] rounded-full bg-indigo-500/10 blur-[120px]"></div>
-      <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] rounded-full bg-emerald-500/10 blur-[120px]"></div>
-
-      <div className="max-w-md w-full space-y-8 bg-slate-800/80 border border-slate-700/50 backdrop-blur-xl p-8 rounded-2xl shadow-xl relative z-10">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-md p-8">
         <div>
           {/* Logo */}
-          <div className="mx-auto h-14 w-14 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/20">
-            <ShieldCheck className="h-8 w-8 text-white" />
+          <div className="mx-auto h-12 w-12 rounded-xl bg-blue-600 text-white grid place-items-center">
+            <ShieldCheck className="h-7 w-7" />
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-white tracking-tight">
+          <h2 className="mt-6 text-center text-2xl font-semibold text-slate-900">
             Continental
           </h2>
-          <p className="mt-2 text-center text-xs font-semibold uppercase tracking-widest text-indigo-400">
+          <p className="mt-1 text-center text-sm text-slate-500">
             CME Checklist Portal
           </p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleCustomLogin}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="email-address" className="sr-only">
-                Endereço de E-mail
-              </label>
-              <input
-                id="email-address"
-                name="email"
-                type="email"
-                required
-                className="appearance-none rounded-lg relative block w-full px-3 py-3 border border-slate-700 bg-slate-900/50 placeholder-slate-500 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                placeholder="Insira seu e-mail corporativo"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setError('');
-                }}
-              />
-            </div>
-          </div>
-
-          {error && <p className="text-rose-400 text-xs text-center">{error}</p>}
-
+        <form className="mt-8 space-y-5" onSubmit={handleCustomLogin}>
           <div>
-            <Button type="submit" fullWidth size="lg">
-              Entrar no Portal
-            </Button>
+            <label htmlFor="email-address" className="block text-sm font-medium text-slate-700 mb-1.5">
+              Endereço de E-mail
+            </label>
+            <input
+              id="email-address"
+              name="email"
+              type="email"
+              required
+              className="block w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60 focus:border-blue-500 transition"
+              placeholder="Insira seu e-mail corporativo"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError('');
+              }}
+            />
           </div>
+
+          {error && <p className="text-red-600 text-xs text-center">{error}</p>}
+
+          <Button type="submit" fullWidth size="lg">
+            Entrar no Portal
+          </Button>
         </form>
 
         {/* Quick Profiles para simplificar testes */}
-        <div className="mt-8 pt-6 border-t border-slate-700/60">
+        <div className="mt-8 pt-6 border-t border-slate-100">
           <p className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
             Acesso Rápido (Sandbox)
           </p>
@@ -106,18 +98,18 @@ export const Login: React.FC = () => {
               <button
                 key={user.id}
                 onClick={() => handleQuickLogin(user)}
-                className="w-full flex items-center justify-between px-4 py-3 bg-slate-900/40 hover:bg-slate-900/80 border border-slate-700/30 rounded-xl transition-all duration-200 text-left hover:scale-102 group active:scale-98"
+                className="w-full flex items-center justify-between bg-white border border-slate-200 rounded-xl p-3 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 text-left group"
               >
                 <div className="flex items-center space-x-3">
-                  <div className="bg-indigo-900/50 text-indigo-400 h-9 w-9 rounded-lg flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                    <UserCheck className="h-5 w-5" />
+                  <div className="h-9 w-9 rounded-full bg-gradient-to-br from-blue-100 via-indigo-100 to-sky-100 border border-blue-200/70 flex items-center justify-center">
+                    <UserCheck className="h-4 w-4 text-blue-600" />
                   </div>
                   <div>
-                    <span className="block text-sm font-semibold text-slate-200">{user.nome}</span>
-                    <span className="block text-[10px] text-slate-400">{user.funcao}</span>
+                    <span className="block text-sm font-semibold text-slate-900">{user.nome}</span>
+                    <span className="block text-[11px] text-slate-500">{user.funcao}</span>
                   </div>
                 </div>
-                <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700 font-semibold group-hover:border-indigo-500/50 group-hover:text-indigo-400 transition-colors">
+                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                   Acessar
                 </span>
               </button>
@@ -128,4 +120,5 @@ export const Login: React.FC = () => {
     </div>
   );
 };
+
 export default Login;

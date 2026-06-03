@@ -17,6 +17,31 @@ import { Inspecao } from '@cme/types';
 import { generateInspectionPDF } from '../utils/pdfGenerator';
 import { exportInspectionsToExcel, exportSingleInspectionToExcel } from '../utils/excelExporter';
 
+function formatMetric(value: number) {
+  return Number.isFinite(value) ? value.toLocaleString('pt-BR') : '0';
+}
+
+interface MetricCardProps {
+  title: string;
+  value: number;
+  icon: React.ComponentType<{ className?: string; size?: number }>;
+  isAlert?: boolean;
+}
+
+const MetricCard: React.FC<MetricCardProps> = ({ title, value, icon: Icon, isAlert = false }) => {
+  return (
+    <div className="w-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-slate-500">{title}</p>
+        <Icon size={18} className="text-slate-400" />
+      </div>
+      <p className={`mt-3 text-3xl font-bold ${isAlert ? 'text-amber-600' : 'text-slate-900'}`}>
+        {formatMetric(value)}
+      </p>
+    </div>
+  );
+};
+
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [inspecoes, setInspecoes] = useState<Inspecao[]>([]);
@@ -34,8 +59,7 @@ export const Dashboard: React.FC = () => {
     insp => insp.respostas.some(r => r.status === 'PENDENTE')
   ).length;
   const emAndamentoCount = inspecoes.filter(insp => insp.status === 'EM_ANDAMENTO').length;
-  const concluídasCount = inspecoes.filter(insp => insp.status === 'VALIDADA' || insp.status === 'CONCLUIDA').length;
-
+  
   const totalMateriaisUtilizados = inspecoes.reduce(
     (total, insp) => total + insp.materiais.reduce((mTotal, m) => mTotal + m.quantidade, 0), 
     0
@@ -61,94 +85,70 @@ export const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="space-y-6">
       {/* Top Welcome Panel */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 dark:text-white leading-none">
-            Painel de Gestão CME
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">
-            Acompanhe o status operacional das inspeções, pendências críticas e consumo de materiais.
-          </p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <Button 
-            variant="secondary" 
-            onClick={handleExportAllExcel}
-            className="flex items-center space-x-2"
-          >
-            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span>Exportar Tudo (Excel)</span>
-          </Button>
-          <a
-            href="http://localhost:5173" // Links directly to apps/mobile locally
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Button className="flex items-center space-x-2">
-              <PlusCircle className="h-4 w-4" />
-              <span>Nova Inspeção (Campo)</span>
+      <Card className="p-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">
+              Painel de Gestão CME
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Acompanhe o status operacional das inspeções, pendências críticas e consumo de materiais.
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <Button 
+              variant="secondary" 
+              onClick={handleExportAllExcel}
+              className="flex items-center gap-2"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+              <span>Exportar Tudo (Excel)</span>
             </Button>
-          </a>
+            <a
+              href="http://localhost:5173" // Links directly to apps/mobile locally
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700">
+                <PlusCircle className="h-4 w-4" />
+                <span>Nova Inspeção (Campo)</span>
+              </Button>
+            </a>
+          </div>
         </div>
-      </div>
+      </Card>
 
       {/* KPI Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <Card className="relative overflow-hidden group">
-          <div className="flex justify-between items-start">
-            <div>
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Total de Inspeções</span>
-              <span className="text-3xl font-extrabold text-slate-800 dark:text-white block mt-2">{totalInspecoes}</span>
-            </div>
-            <div className="p-3 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 rounded-xl">
-              <TrendingUp className="h-6 w-6" />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="relative overflow-hidden group">
-          <div className="flex justify-between items-start">
-            <div>
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Com Pendências</span>
-              <span className="text-3xl font-extrabold text-amber-600 block mt-2">{pendentesCount}</span>
-            </div>
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/20 text-amber-500 rounded-xl">
-              <AlertTriangle className="h-6 w-6" />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="relative overflow-hidden group">
-          <div className="flex justify-between items-start">
-            <div>
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Em Andamento</span>
-              <span className="text-3xl font-extrabold text-sky-600 block mt-2">{emAndamentoCount}</span>
-            </div>
-            <div className="p-3 bg-sky-50 dark:bg-sky-950/20 text-sky-500 rounded-xl">
-              <Wrench className="h-6 w-6" />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="relative overflow-hidden group">
-          <div className="flex justify-between items-start">
-            <div>
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Materiais Utilizados</span>
-              <span className="text-3xl font-extrabold text-emerald-600 block mt-2">{totalMateriaisUtilizados} <span className="text-xs text-slate-400 font-medium">un</span></span>
-            </div>
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 rounded-xl">
-              <CheckCircle className="h-6 w-6" />
-            </div>
-          </div>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard 
+          title="Total de Inspeções" 
+          value={totalInspecoes} 
+          icon={TrendingUp} 
+        />
+        <MetricCard 
+          title="Com Pendências" 
+          value={pendentesCount} 
+          icon={AlertTriangle} 
+          isAlert={true} 
+        />
+        <MetricCard 
+          title="Em Andamento" 
+          value={emAndamentoCount} 
+          icon={Wrench} 
+        />
+        <MetricCard 
+          title="Materiais Utilizados" 
+          value={totalMateriaisUtilizados} 
+          icon={CheckCircle} 
+        />
       </div>
 
       {/* Filter and Audit List */}
-      <div className="bg-white border border-slate-200/80 dark:bg-slate-900 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+      <Card className="overflow-hidden">
         {/* Filter Bar */}
-        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 md:space-x-4 bg-slate-50/50 dark:bg-slate-950/10">
+        <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 md:space-x-4 bg-slate-50/50">
           <div className="relative flex-1 max-w-md">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-slate-400" />
@@ -156,7 +156,7 @@ export const Dashboard: React.FC = () => {
             <input
               type="text"
               placeholder="Buscar por equipamento ou responsável..."
-              className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl block w-full text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 dark:bg-slate-850 dark:border-slate-700 dark:text-white"
+              className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-gray-200 bg-white outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -165,40 +165,40 @@ export const Dashboard: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setStatusFilter('ALL')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold select-none border transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold select-none border transition-colors ${
                 statusFilter === 'ALL'
-                  ? 'bg-slate-900 border-slate-900 text-white'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
               }`}
             >
               Todos
             </button>
             <button
               onClick={() => setStatusFilter('VALIDADA')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold select-none border transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold select-none border transition-colors ${
                 statusFilter === 'VALIDADA'
-                  ? 'bg-slate-900 border-slate-900 text-white'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
               }`}
             >
               Validados
             </button>
             <button
               onClick={() => setStatusFilter('EM_ANDAMENTO')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold select-none border transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold select-none border transition-colors ${
                 statusFilter === 'EM_ANDAMENTO'
-                  ? 'bg-slate-900 border-slate-900 text-white'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
               }`}
             >
               Em Andamento
             </button>
             <button
               onClick={() => setStatusFilter('PENDENTE')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold select-none border transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold select-none border transition-colors ${
                 statusFilter === 'PENDENTE'
                   ? 'bg-amber-500 border-amber-500 text-slate-950'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
               }`}
             >
               Com Pendência
@@ -215,8 +215,8 @@ export const Dashboard: React.FC = () => {
               <p className="text-slate-500 text-xs mt-1">Ajuste os filtros ou crie uma nova inspeção de campo.</p>
             </div>
           ) : (
-            <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
-              <thead className="bg-slate-50/50 dark:bg-slate-950/20 text-slate-500 text-[10px] font-bold uppercase tracking-wider text-left">
+            <table className="min-w-full divide-y divide-slate-100 text-left">
+              <thead className="bg-slate-50/50 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
                 <tr>
                   <th className="px-6 py-4">Equipamento</th>
                   <th className="px-6 py-4">Tipo</th>
@@ -228,21 +228,20 @@ export const Dashboard: React.FC = () => {
                   <th className="px-6 py-4 text-right">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+              <tbody className="divide-y divide-slate-100 text-sm">
                 {filteredInspecoes.map((insp) => {
-                  // Contagem de pendências
                   const totalItens = insp.respostas.length;
                   const pendentes = insp.respostas.filter(r => r.status === 'PENDENTE').length;
 
                   return (
-                    <tr key={insp.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition-colors">
+                    <tr key={insp.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
-                          <span className="font-bold text-slate-800 dark:text-white">{insp.equipamento?.codigo}</span>
+                          <span className="font-bold text-slate-850">{insp.equipamento?.codigo}</span>
                           <span className="block text-[11px] text-slate-400 mt-0.5">{insp.equipamento?.nome}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                      <td className="px-6 py-4 whitespace-nowrap text-slate-650">
                         {insp.tipo === 'PRE_EMBARQUE' && 'Pré-Embarque'}
                         {insp.tipo === 'OPERACIONAL' && 'Operacional'}
                         {insp.tipo === 'RETORNO_EMBARQUE' && 'Retorno'}
@@ -250,7 +249,7 @@ export const Dashboard: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-slate-500">
                         {new Date(insp.data).toLocaleString('pt-BR')}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-slate-700 dark:text-slate-300 font-medium">
+                      <td className="px-6 py-4 whitespace-nowrap text-slate-700 font-medium">
                         {insp.responsavelGeral || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-slate-500">
@@ -260,7 +259,7 @@ export const Dashboard: React.FC = () => {
                         <div className="flex items-center space-x-1.5">
                           <span className="text-slate-700 font-semibold">{totalItens}</span>
                           {pendentes > 0 && (
-                            <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                            <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
                               {pendentes} pendente{pendentes > 1 ? 's' : ''}
                             </span>
                           )}
@@ -274,7 +273,7 @@ export const Dashboard: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => navigate(`/inspecoes/${insp.id}`)}
-                          className="hover:text-indigo-600 hover:bg-indigo-50"
+                          className="hover:text-blue-600 hover:bg-slate-50"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </Button>
@@ -282,7 +281,7 @@ export const Dashboard: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => generateInspectionPDF(insp)}
-                          className="hover:text-rose-600 hover:bg-rose-50"
+                          className="hover:text-red-600 hover:bg-slate-50"
                           title="Baixar PDF"
                         >
                           <FileText className="h-3.5 w-3.5" />
@@ -291,7 +290,7 @@ export const Dashboard: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => exportSingleInspectionToExcel(insp)}
-                          className="hover:text-emerald-600 hover:bg-emerald-50"
+                          className="hover:text-green-600 hover:bg-slate-50"
                           title="Exportar Excel"
                         >
                           <FileSpreadsheet className="h-3.5 w-3.5" />
@@ -304,8 +303,9 @@ export const Dashboard: React.FC = () => {
             </table>
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 };
+
 export default Dashboard;

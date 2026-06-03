@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import InspecaoDetalhes from './pages/InspecaoDetalhes';
-import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
 import api from './services/api';
 
 // Protected Route Guard
@@ -15,9 +15,9 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <Navbar />
-      <main className="flex-1 bg-slate-50">
+    <div className="flex min-h-screen bg-slate-50">
+      <Sidebar />
+      <main className="flex-1 p-8 overflow-y-auto">
         {children}
       </main>
     </div>
