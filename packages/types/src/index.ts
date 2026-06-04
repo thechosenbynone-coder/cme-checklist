@@ -53,9 +53,12 @@ export interface RespostaItem {
   status: StatusItem;
   observacao?: string;
   responsavel?: string; // Quem executou aquela tarefa específica (e.g. elétrica, pintura, etc.)
+  certificadoId?: string;
+  certificadoValidade?: string;
   createdById?: string;
   item?: ItemChecklist;
 }
+
 
 export interface Material {
   id: string;
@@ -90,4 +93,9 @@ export interface Inspecao {
   equipamento?: Equipamento;
   respostas: RespostaItem[];
   materiais: MaterialUtilizado[];
+  origem?: string;
+  destino?: string;
+  compressorUtilizado?: string;
+  classificacao?: string;
 }
+

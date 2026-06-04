@@ -58,7 +58,7 @@ export const InspecaoDetalhes: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
         <button
           onClick={() => navigate('/')}
-          className="flex items-center space-x-2 text-slate-555 hover:text-slate-800 transition-colors text-sm font-semibold"
+          className="flex items-center space-x-2 text-slate-500 hover:text-slate-800 transition-colors text-sm font-semibold"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Voltar ao Painel</span>
@@ -102,7 +102,7 @@ export const InspecaoDetalhes: React.FC = () => {
         subtitle={`Registro ID: ${inspecao.id}`}
         headerAction={<Badge type={inspecao.status} />}
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
           <div>
             <span className="text-slate-500 text-xs font-semibold uppercase tracking-wide block">Tipo de Inspeção</span>
             <span className="text-slate-900 text-sm font-bold block mt-1">
@@ -127,6 +127,18 @@ export const InspecaoDetalhes: React.FC = () => {
               {inspecao.localizacao || 'N/A'}
             </span>
           </div>
+          <div>
+            <span className="text-slate-500 text-xs font-semibold uppercase tracking-wide block">Origem</span>
+            <span className="text-slate-900 text-sm font-bold block mt-1">
+              {inspecao.origem || 'N/A'}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500 text-xs font-semibold uppercase tracking-wide block">Destino</span>
+            <span className="text-slate-900 text-sm font-bold block mt-1">
+              {inspecao.destino || 'N/A'}
+            </span>
+          </div>
         </div>
       </Card>
 
@@ -145,7 +157,20 @@ export const InspecaoDetalhes: React.FC = () => {
                       <p className="text-slate-800 font-medium">
                         {resp.item?.descricao}
                       </p>
-                      {(resp.observacao || resp.responsavel) && (
+
+                      {/* Certificados info if present */}
+                      {(resp.certificadoId || resp.certificadoValidade) && (
+                        <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-550 font-medium bg-slate-50 border border-slate-100 p-2 rounded-lg max-w-fit">
+                          {resp.certificadoId && (
+                            <span><strong className="text-slate-700">Certificado ID:</strong> {resp.certificadoId}</span>
+                          )}
+                          {resp.certificadoValidade && (
+                            <span><strong className="text-slate-700">Validade:</strong> {resp.certificadoValidade}</span>
+                          )}
+                        </div>
+                      )}
+
+                      {(resp.observacao || (resp.responsavel && resp.responsavel.trim())) && (
                         <div className="flex flex-wrap gap-2 mt-1.5">
                           {resp.observacao && (
                             <span className="text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -153,7 +178,7 @@ export const InspecaoDetalhes: React.FC = () => {
                               Obs: {resp.observacao}
                             </span>
                           )}
-                          {resp.responsavel && (
+                          {resp.responsavel && resp.responsavel.trim() && (
                             <span className="text-xs text-blue-700 bg-blue-50/50 border border-blue-100 px-2 py-0.5 rounded-full flex items-center gap-1">
                               <User className="h-3 w-3 text-blue-500" />
                               Executante: {resp.responsavel}

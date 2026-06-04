@@ -19,11 +19,13 @@ export const exportInspectionsToExcel = (inspecoes: Inspecao[]): void => {
       'Tipo de Equipamento': insp.equipamento?.tipo || 'N/A',
       'Tipo de Inspeção': insp.tipo.replace('_', ' '),
       'Data / Hora': new Date(insp.data).toLocaleString('pt-BR'),
-      'Status Geral': insp.status,
+      'Status Geral': insp.status === 'CONCLUIDA' || insp.status === 'VALIDADA' ? 'APROVADO' : insp.status,
       'Responsável': insp.responsavelGeral || 'N/A',
       'Localização': insp.localizacao || 'N/A',
-      'Itens OK': okCount,
-      'Itens Pendentes': pendingCount,
+      'Origem': insp.origem || 'N/A',
+      'Destino': insp.destino || 'N/A',
+      'Itens Aprovados': okCount,
+      'Itens Reprovados': pendingCount,
       'Itens N/A': naCount,
       'Total Itens': insp.respostas.length,
       'Materiais Utilizados (Qtd)': materialQuantity,
@@ -67,20 +69,30 @@ export const exportSingleInspectionToExcel = (inspecao: Inspecao): void => {
     { Campo: 'Status da Inspeção', Valor: inspecao.status },
     { Campo: 'Responsável Geral', Valor: inspecao.responsavelGeral || 'N/A' },
     { Campo: 'Localização', Valor: inspecao.localizacao || 'N/A' },
+    { Campo: 'Origem', Valor: inspecao.origem || 'N/A' },
+    { Campo: 'Destino', Valor: inspecao.destino || 'N/A' },
     { Campo: 'Observações Gerais', Valor: inspecao.observacoesGerais || '' }
   ];
   const wsResumo = XLSX.utils.json_to_sheet(resumo);
   XLSX.utils.book_append_sheet(workbook, wsResumo, 'Resumo');
 
   // Aba 2: Itens do Checklist
-  const itens = inspecao.respostas.map(resp => ({
-    'Ordem': resp.item?.ordem || 0,
-    'Seção': resp.item?.secao || 'N/A',
-    'Descrição do Item': resp.item?.descricao || 'N/A',
-    'Status': resp.status,
-    'Observação do Item': resp.observacao || '',
-    'Responsável Específico': resp.responsavel || ''
-  }));
+  const itens = inspecao.respostas.map(resp => {
+    let statusText = 'N/A';
+    if (resp.status === 'OK') statusText = 'APROVADO';
+    if (resp.status === 'PENDENTE') statusText = 'REPROVADO';
+    
+    return {
+      'Ordem': resp.item?.ordem || 0,
+      'Seção': resp.item?.secao || 'N/A',
+      'Descrição do Item': resp.item?.descricao || 'N/A',
+      'Certificado ID': resp.certificadoId || '',
+      'Validade Certificado': resp.certificadoValidade || '',
+      'Status': statusText,
+      'Observação do Item': resp.observacao || '',
+      'Executante': resp.responsavel || ''
+    };
+  });
   const wsItens = XLSX.utils.json_to_sheet(itens);
   XLSX.utils.book_append_sheet(workbook, wsItens, 'Checklist');
 

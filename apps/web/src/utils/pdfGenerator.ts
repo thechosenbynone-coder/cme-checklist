@@ -13,8 +13,7 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
   // Cores institucionais
   const primaryColor = [27, 35, 48]; // #1b2330 (navy)
   const successColor = [16, 185, 129]; // #10b981 (emerald)
-  const warningColor = [245, 158, 11]; // #f59e0b (amber)
-  const dangerColor = [244, 63, 94]; // #f43f5e (rose)
+  const dangerColor = [239, 68, 68]; // #ef4444 (red)
   const grayColor = [100, 116, 139]; // #64748b (slate)
 
   // 1. Cabeçalho Principal (Borda e Título)
@@ -31,10 +30,12 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
   doc.text('OIL & GAS SERVICES', 15, 23);
   
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('FORMULÁRIO DE INSPEÇÃO', 80, 20);
-  doc.setFontSize(9);
-  doc.text('CHECK LIST OPERACIONAL AFTER COOLER', 80, 27);
+  doc.setFontSize(10);
+  doc.text('CHECK LIST OPERACIONAL DE LIBERACAO', 77, 18);
+  doc.text('DE EQUIPAMENTO', 77, 23);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('CHECK LIST OPERACIONAL AFTER COOLER', 77, 29);
   
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
@@ -47,8 +48,8 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setFillColor(244, 246, 248);
-  doc.rect(10, 40, 190, 32, 'F');
-  doc.rect(10, 40, 190, 32);
+  doc.rect(10, 40, 190, 38, 'F');
+  doc.rect(10, 40, 190, 38);
 
   doc.setFont('helvetica', 'bold');
   doc.text('DADOS DA INSPEÇÃO', 14, 46);
@@ -57,20 +58,31 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
   doc.text(`Equipamento: ${inspecao.equipamento?.nome || 'N/A'} (${inspecao.equipamento?.codigo || 'N/A'})`, 14, 53);
   doc.text(`Tipo de Inspeção: ${inspecao.tipo.replace('_', ' ')}`, 14, 59);
   doc.text(`Responsável Geral: ${inspecao.responsavelGeral || 'Não informado'}`, 14, 65);
+  doc.text(`Origem: ${inspecao.origem || 'Não informado'}`, 14, 71);
   
   doc.text(`Data da Inspeção: ${new Date(inspecao.data).toLocaleString('pt-BR')}`, 110, 53);
   doc.text(`Localização/Base: ${inspecao.localizacao || 'Não informado'}`, 110, 59);
+  doc.text(`Destino: ${inspecao.destino || 'Não informado'}`, 110, 65);
   
-  let currentY = 78;
+  let currentY = 84;
 
   // 3. Tabela de Respostas do Checklist
-  const itemRows = inspecao.respostas.map((resp, i) => {
+  const itemRows = inspecao.respostas.map((resp) => {
     let statusText = 'N/A';
-    if (resp.status === 'OK') statusText = 'OK';
-    if (resp.status === 'PENDENTE') statusText = 'PENDENTE';
+    if (resp.status === 'OK') statusText = 'APROVADO';
+    if (resp.status === 'PENDENTE') statusText = 'REPROVADO';
+
+    let descText = resp.item?.descricao || 'Sem descrição';
+    if (resp.certificadoId || resp.certificadoValidade) {
+      const certParts = [];
+      if (resp.certificadoId) certParts.push(`ID: ${resp.certificadoId}`);
+      if (resp.certificadoValidade) certParts.push(`VAL: ${resp.certificadoValidade}`);
+      descText += `\n(${certParts.join(' / ')})`;
+    }
+
     return [
       resp.item?.secao || 'GERAL',
-      resp.item?.descricao || 'Sem descrição',
+      descText,
       statusText,
       resp.observacao || '',
       resp.responsavel || ''
@@ -96,18 +108,18 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
     columnStyles: {
       0: { cellWidth: 40 },
       1: { cellWidth: 70 },
-      2: { cellWidth: 20, fontStyle: 'bold', halign: 'center' },
-      3: { cellWidth: 40 },
+      2: { cellWidth: 22, fontStyle: 'bold', halign: 'center' },
+      3: { cellWidth: 38 },
       4: { cellWidth: 20 }
     },
     didParseCell: (data: any) => {
       // Colorir a coluna do status
       if (data.column.index === 2 && data.section === 'body') {
         const val = data.cell.raw;
-        if (val === 'OK') {
+        if (val === 'APROVADO') {
           data.cell.styles.textColor = successColor;
-        } else if (val === 'PENDENTE') {
-          data.cell.styles.textColor = warningColor;
+        } else if (val === 'REPROVADO') {
+          data.cell.styles.textColor = dangerColor;
         } else {
           data.cell.styles.textColor = grayColor;
         }

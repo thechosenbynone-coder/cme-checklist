@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, AlertTriangle, HelpCircle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ArrowLeft, Check, AlertTriangle, HelpCircle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Calendar, FileText } from 'lucide-react';
 import { Card, Button } from '@cme/ui';
 import api from '../services/api';
 import { Equipamento, ChecklistModelo, Material, Inspecao, RespostaItem, MaterialUtilizado, StatusItem } from '@cme/types';
@@ -12,7 +12,13 @@ export const ChecklistPreenchimento: React.FC = () => {
   const [modelo, setModelo] = useState<ChecklistModelo | null>(null);
   
   // Respostas e Materiais catalog
-  const [respostas, setRespostas] = useState<Record<string, { status: StatusItem; observacao: string; responsavel: string }>>({});
+  const [respostas, setRespostas] = useState<Record<string, { 
+    status: StatusItem; 
+    observacao: string; 
+    responsavel: string;
+    certificadoId?: string;
+    certificadoValidade?: string;
+  }>>({});
   const [materiaisDisponiveis, setMateriaisDisponiveis] = useState<Material[]>([]);
   const [materiaisUtilizados, setMateriaisUtilizados] = useState<Omit<MaterialUtilizado, 'id' | 'inspecaoId'>[]>([]);
   
@@ -57,7 +63,9 @@ export const ChecklistPreenchimento: React.FC = () => {
               initialRespostas[item.id] = {
                 status: 'OK',
                 observacao: '',
-                responsavel: ''
+                responsavel: '',
+                certificadoId: '',
+                certificadoValidade: ''
               };
             });
             setRespostas(initialRespostas);
@@ -137,11 +145,16 @@ export const ChecklistPreenchimento: React.FC = () => {
       [itemId]: { ...prev[itemId], status }
     }));
     
-    // Auto-advance after status selection
-    // Delay slightly to give a pleasant feedback tick to the user
-    setTimeout(() => {
-      goToNextStep();
-    }, 280);
+    // Auto-advance after status selection (unless they need to fill in certificates)
+    const item = modelo?.itens?.[currentStep];
+    const isIdAndValid = item?.descricao.includes('(ID/VALID)');
+    const isValidOnly = item?.descricao.includes('(VALID)');
+    
+    if (!isIdAndValid && !isValidOnly) {
+      setTimeout(() => {
+        goToNextStep();
+      }, 280);
+    }
   };
 
   // Resposta comments/observações changer
@@ -157,6 +170,22 @@ export const ChecklistPreenchimento: React.FC = () => {
     setRespostas(prev => ({
       ...prev,
       [itemId]: { ...prev[itemId], responsavel }
+    }));
+  };
+
+  // Resposta certificate ID changer
+  const handleCertIdChange = (itemId: string, certificadoId: string) => {
+    setRespostas(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], certificadoId }
+    }));
+  };
+
+  // Resposta certificate validity changer
+  const handleCertValidadeChange = (itemId: string, certificadoValidade: string) => {
+    setRespostas(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], certificadoValidade }
     }));
   };
 
@@ -219,6 +248,8 @@ export const ChecklistPreenchimento: React.FC = () => {
       status: value.status,
       observacao: value.observacao || undefined,
       responsavel: value.responsavel || undefined,
+      certificadoId: value.certificadoId || undefined,
+      certificadoValidade: value.certificadoValidade || undefined,
     }));
 
     // Mapear materiais
@@ -242,12 +273,16 @@ export const ChecklistPreenchimento: React.FC = () => {
       assinaturaBase64: assinaturaBase64 || undefined,
       respostas: finalRespostas,
       materiais: finalMateriais,
+      origem: metadata.origem,
+      destino: metadata.destino,
+      compressorUtilizado: metadata.compressorUtilizado,
+      classificacao: metadata.classificacao
     };
 
     await api.inspecoes.save(novaInspecao);
     
     window.sessionStorage.removeItem('cme_nova_inspecao_meta');
-    alert('Inspeção de After Cooler concluída com sucesso e enviada ao servidor local! ✅');
+    alert('Inspeção concluída com sucesso e enviada ao servidor local! ✅');
     navigate('/');
   };
 
@@ -285,84 +320,119 @@ export const ChecklistPreenchimento: React.FC = () => {
     if (currentStep < totalItens) {
       const item = modelo.itens?.[currentStep];
       if (!item) return null;
-      const resp = respostas[item.id] || { status: 'OK', observacao: '', responsavel: '' };
+      const resp = respostas[item.id] || { status: 'OK', observacao: '', responsavel: '', certificadoId: '', certificadoValidade: '' };
       const hasDetails = !!showDetailsMap[item.id];
+      const isIdAndValid = item.descricao.includes('(ID/VALID)');
+      const isValidOnly = item.descricao.includes('(VALID)');
 
       return (
-        <div className="space-y-6 animate-fadeIn w-full">
-          {/* Section Indicator */}
-          <div className="bg-blue-50 border border-blue-100 text-blue-800 px-4 py-2.5 rounded-2xl text-[11px] font-bold uppercase tracking-wider text-center">
-            {item.secao}
+        <div className="space-y-5 animate-fadeIn w-full">
+          {/* Section Indicator - Pill style */}
+          <div className="flex justify-center">
+            <span className="bg-blue-600 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-wider shadow-sm text-center">
+              {item.secao}
+            </span>
           </div>
 
-          {/* Item description */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 text-center">
+          {/* Item description card */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 text-center">
             <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block mb-2">Item {item.ordem} de {totalItens}</span>
-            <p className="text-base font-bold text-slate-800 leading-relaxed">
+            <p className="text-sm font-extrabold text-slate-800 leading-relaxed">
               {item.descricao}
             </p>
+
+            {/* Certificado Inputs integrated directly on card */}
+            {(isIdAndValid || isValidOnly) && (
+              <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3 text-left">
+                <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Informações de Certificação</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {isIdAndValid && (
+                    <div>
+                      <label className="block text-[8px] font-bold text-slate-500 mb-1">ID do Certificado</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: ID-10023"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                        value={resp.certificadoId || ''}
+                        onChange={(e) => handleCertIdChange(item.id, e.target.value)}
+                      />
+                    </div>
+                  )}
+                  <div className={isIdAndValid ? "" : "col-span-2"}>
+                    <label className="block text-[8px] font-bold text-slate-500 mb-1">Validade do Certificado</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: DD/MM/AAAA"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                      value={resp.certificadoValidade || ''}
+                      onChange={(e) => handleCertValidadeChange(item.id, e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Status Selection Big Stack Touch Targets */}
-          <div className="flex flex-col gap-3">
+          {/* Status Selection Buttons Stack */}
+          <div className="flex flex-col gap-2.5">
             <button
               type="button"
               onClick={() => handleStatusChange(item.id, 'OK')}
-              className={`w-full py-4 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
+              className={`w-full py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
                 resp.status === 'OK'
                   ? 'bg-green-600 border-green-600 text-white shadow-md shadow-green-600/10'
-                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  : 'bg-white border-slate-250 text-slate-700 hover:bg-slate-50'
               }`}
             >
-              <Check className="h-5 w-5" />
-              <span>Conforme</span>
+              <Check className="h-4.5 w-4.5" />
+              <span>Aprovado</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleStatusChange(item.id, 'PENDENTE')}
-              className={`w-full py-4 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
+              className={`w-full py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
                 resp.status === 'PENDENTE'
-                  ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-md shadow-amber-500/10'
-                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  ? 'bg-red-600 border-red-600 text-white shadow-md shadow-red-600/10'
+                  : 'bg-white border-slate-250 text-slate-700 hover:bg-slate-50'
               }`}
             >
-              <AlertTriangle className="h-5 w-5" />
-              <span>Pendente</span>
+              <AlertTriangle className="h-4.5 w-4.5" />
+              <span>Reprovado</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleStatusChange(item.id, 'NAO_APLICAVEL')}
-              className={`w-full py-4 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
+              className={`w-full py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
                 resp.status === 'NAO_APLICAVEL'
-                  ? 'bg-slate-650 border-slate-650 text-white shadow-md shadow-slate-600/10'
-                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  ? 'bg-slate-500 border-slate-500 text-white shadow-md shadow-slate-500/10'
+                  : 'bg-white border-slate-250 text-slate-700 hover:bg-slate-50'
               }`}
             >
-              <HelpCircle className="h-5 w-5" />
-              <span>Não Aplicável (N/A)</span>
+              <HelpCircle className="h-4.5 w-4.5" />
+              <span>Não se Aplica</span>
             </button>
           </div>
 
-          {/* Optional metadata (Executante & observações) */}
+          {/* Optional Details Collapse trigger */}
           <div className="space-y-2">
             {!hasDetails ? (
               <button
                 type="button"
                 onClick={() => toggleDetails(item.id)}
-                className="w-full text-center text-xs font-semibold text-slate-500 hover:text-slate-700 py-2.5 border border-dashed border-slate-300 rounded-xl bg-white hover:bg-slate-50 transition"
+                className="w-full text-center text-xs font-semibold text-slate-450 hover:text-slate-700 py-2 border border-dashed border-slate-300 rounded-xl bg-white hover:bg-slate-50 transition"
               >
-                + Adicionar Obs. ou Executante Específico
+                + Adicionar Obs. ou Nome do Executante
               </button>
             ) : (
-              <div className="bg-white rounded-2xl border border-slate-200/80 p-4 space-y-3 shadow-sm animate-slideDown">
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-sm animate-slideDown">
                 <div className="flex justify-between items-center">
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Informações Extras</span>
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Detalhes Adicionais</span>
                   <button
                     type="button"
                     onClick={() => toggleDetails(item.id)}
-                    className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+                    className="text-xs text-slate-400 hover:text-slate-650 font-bold"
                   >
                     Ocultar
                   </button>
@@ -370,26 +440,22 @@ export const ChecklistPreenchimento: React.FC = () => {
                 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[9px] font-bold text-slate-500 mb-1">Responsável pela execução (Executante)</label>
-                    <select
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 outline-none focus:ring-2 focus:ring-blue-200"
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">Nome do Executante</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: João da Silva (Elétrica)"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
                       value={resp.responsavel}
                       onChange={(e) => handleRespChange(item.id, e.target.value)}
-                    >
-                      <option value="">Selecione executante...</option>
-                      <option value="Mecânica">Mecânica</option>
-                      <option value="Elétrica">Elétrica</option>
-                      <option value="Instrumentação">Instrumentação</option>
-                      <option value="Pintura / Estrutura">Pintura / Estrutura</option>
-                    </select>
+                    />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-bold text-slate-500 mb-1">Nota / Observação do Item</label>
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">Observação do Item</label>
                     <input
                       type="text"
-                      placeholder="Ex: Identificado desgaste sutil..."
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-905 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="Ex: Necessário substituição de cabo..."
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
                       value={resp.observacao}
                       onChange={(e) => handleObsChange(item.id, e.target.value)}
                     />
@@ -412,7 +478,7 @@ export const ChecklistPreenchimento: React.FC = () => {
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Material</label>
                   <select
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-750 outline-none"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 outline-none"
                     value={selectedMaterialId}
                     onChange={(e) => setSelectedMaterialId(e.target.value)}
                   >
@@ -463,7 +529,7 @@ export const ChecklistPreenchimento: React.FC = () => {
                 <div className="max-h-48 overflow-y-auto mt-4 pt-3 border-t border-slate-100 space-y-2">
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Materiais Adicionados:</span>
                   {materiaisUtilizados.map(mat => (
-                    <div key={mat.materialId} className="flex justify-between items-center bg-slate-50 border border-slate-150 p-2 rounded-xl text-xs">
+                    <div key={mat.materialId} className="flex justify-between items-center bg-slate-50 border border-slate-150 p-2.5 rounded-xl text-xs">
                       <div className="flex-1 pr-2">
                         <span className="font-bold text-slate-700 block leading-tight">{mat.material?.descricao}</span>
                         <span className="text-[10px] text-slate-400 block mt-0.5">SKU: {mat.material?.codigo} &bull; Qtd: {mat.quantidade} {mat.material?.unidade}</span>
@@ -472,7 +538,7 @@ export const ChecklistPreenchimento: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleRemoveMaterial(mat.materialId)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
+                        className="p-1.5 text-slate-450 hover:text-red-500 hover:bg-red-50 rounded"
                       >
                         <Trash className="h-4 w-4" />
                       </button>
@@ -540,7 +606,7 @@ export const ChecklistPreenchimento: React.FC = () => {
           <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex gap-3 text-xs text-blue-800 leading-normal">
             <ShieldCheck className="h-5 w-5 text-blue-600 flex-shrink-0" />
             <p>
-              Ao finalizar, esta inspeção será salva com o status **Concluída** e enviada ao Portal para auditoria e validação da supervisão.
+              Ao finalizar, esta inspeção será salva com o status **Concluída** e enviada ao Portal para validação.
             </p>
           </div>
         </div>
@@ -559,8 +625,10 @@ export const ChecklistPreenchimento: React.FC = () => {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="text-sm font-bold text-slate-800 leading-tight">Preenchimento de Checklist</h1>
-            <p className="text-[10px] text-slate-400 font-semibold uppercase">{equipamento?.codigo} &bull; {metadata?.tipo.replace('_', ' ')}</p>
+            <h1 className="text-xs font-bold text-slate-800 leading-tight uppercase tracking-tight">
+              CHECK LIST OPERACIONAL DE LIBERAÇÃO DE EQUIPAMENTO
+            </h1>
+            <p className="text-[9px] text-slate-400 font-semibold uppercase">{equipamento?.codigo} &bull; {metadata?.tipo.replace('_', ' ')}</p>
           </div>
         </div>
 
