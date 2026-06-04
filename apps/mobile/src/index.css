@@ -11,6 +11,24 @@ body {
 }
 
 /* Permitir seleção em inputs e observações */
-input, textarea {
+input, textarea, select {
   user-select: text;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: scaleY(0.95); transform-origin: top; }
+  to { opacity: 1; transform: scaleY(1); transform-origin: top; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slideDown {
+  animation: slideDown 0.2s ease-out forwards;
 }

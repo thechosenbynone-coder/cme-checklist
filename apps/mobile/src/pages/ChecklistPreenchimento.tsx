@@ -18,6 +18,7 @@ export const ChecklistPreenchimento: React.FC = () => {
   
   // Wizard Navigation State
   const [currentStep, setCurrentStep] = useState(0);
+  const [showDetailsMap, setShowDetailsMap] = useState<Record<string, boolean>>({});
   
   // Adição de materiais local state
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
@@ -25,7 +26,7 @@ export const ChecklistPreenchimento: React.FC = () => {
   const [materialObs, setMaterialObs] = useState('');
   
   // Observações gerais da inspeção
-  const [observacoesGerais, setObservacoesGears] = useState('');
+  const [observacoesGerais, setObservacoesGerais] = useState('');
 
   // Canvas Signature ref
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -121,6 +122,14 @@ export const ChecklistPreenchimento: React.FC = () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
+  // Toggle details visibility for observations and responsible per item
+  const toggleDetails = (itemId: string) => {
+    setShowDetailsMap(prev => ({
+      ...prev,
+      [itemId]: !prev[itemId]
+    }));
+  };
+
   // Resposta status changer
   const handleStatusChange = (itemId: string, status: StatusItem) => {
     setRespostas(prev => ({
@@ -128,11 +137,11 @@ export const ChecklistPreenchimento: React.FC = () => {
       [itemId]: { ...prev[itemId], status }
     }));
     
-    // Auto-advance after status selection (optional, but requested/user-friendly)
-    // We delay slightly so the user sees the button tick/select before moving
+    // Auto-advance after status selection
+    // Delay slightly to give a pleasant feedback tick to the user
     setTimeout(() => {
       goToNextStep();
-    }, 250);
+    }, 280);
   };
 
   // Resposta comments/observações changer
@@ -277,30 +286,31 @@ export const ChecklistPreenchimento: React.FC = () => {
       const item = modelo.itens?.[currentStep];
       if (!item) return null;
       const resp = respostas[item.id] || { status: 'OK', observacao: '', responsavel: '' };
+      const hasDetails = !!showDetailsMap[item.id];
 
       return (
-        <div className="space-y-6 animate-fadeIn">
+        <div className="space-y-6 animate-fadeIn w-full">
           {/* Section Indicator */}
-          <div className="bg-blue-50 border border-blue-100 text-blue-750 px-3.5 py-2.5 rounded-2xl text-[11px] font-bold uppercase tracking-wide">
-            Seção: {item.secao}
+          <div className="bg-blue-50 border border-blue-100 text-blue-800 px-4 py-2.5 rounded-2xl text-[11px] font-bold uppercase tracking-wider text-center">
+            {item.secao}
           </div>
 
           {/* Item description */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Item {item.ordem}</span>
-            <p className="text-sm font-bold text-slate-800 leading-relaxed">
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 text-center">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block mb-2">Item {item.ordem} de {totalItens}</span>
+            <p className="text-base font-bold text-slate-800 leading-relaxed">
               {item.descricao}
             </p>
           </div>
 
-          {/* Status Selection Big Touch Targets */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Status Selection Big Stack Touch Targets */}
+          <div className="flex flex-col gap-3">
             <button
               type="button"
               onClick={() => handleStatusChange(item.id, 'OK')}
-              className={`py-4 px-4 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-95 ${
+              className={`w-full py-4 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
                 resp.status === 'OK'
-                  ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-600/10'
+                  ? 'bg-green-600 border-green-600 text-white shadow-md shadow-green-600/10'
                   : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
             >
@@ -311,7 +321,7 @@ export const ChecklistPreenchimento: React.FC = () => {
             <button
               type="button"
               onClick={() => handleStatusChange(item.id, 'PENDENTE')}
-              className={`py-4 px-4 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-95 ${
+              className={`w-full py-4 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
                 resp.status === 'PENDENTE'
                   ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-md shadow-amber-500/10'
                   : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -324,48 +334,69 @@ export const ChecklistPreenchimento: React.FC = () => {
             <button
               type="button"
               onClick={() => handleStatusChange(item.id, 'NAO_APLICAVEL')}
-              className={`py-4 px-4 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-95 ${
+              className={`w-full py-4 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
                 resp.status === 'NAO_APLICAVEL'
                   ? 'bg-slate-650 border-slate-650 text-white shadow-md shadow-slate-600/10'
                   : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
             >
               <HelpCircle className="h-5 w-5" />
-              <span>Não Aplicável</span>
+              <span>Não Aplicável (N/A)</span>
             </button>
           </div>
 
           {/* Optional metadata (Executante & observações) */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 space-y-4 shadow-sm">
-            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Informações Adicionais (Opcional)</span>
-            
-            <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">Responsável pela execução (Executante)</label>
-                <select
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
-                  value={resp.responsavel}
-                  onChange={(e) => handleRespChange(item.id, e.target.value)}
-                >
-                  <option value="">Selecione executante...</option>
-                  <option value="Mecânica">Mecânica</option>
-                  <option value="Elétrica">Elétrica</option>
-                  <option value="Instrumentação">Instrumentação</option>
-                  <option value="Pintura / Estrutura">Pintura / Estrutura</option>
-                </select>
-              </div>
+          <div className="space-y-2">
+            {!hasDetails ? (
+              <button
+                type="button"
+                onClick={() => toggleDetails(item.id)}
+                className="w-full text-center text-xs font-semibold text-slate-500 hover:text-slate-700 py-2.5 border border-dashed border-slate-300 rounded-xl bg-white hover:bg-slate-50 transition"
+              >
+                + Adicionar Obs. ou Executante Específico
+              </button>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200/80 p-4 space-y-3 shadow-sm animate-slideDown">
+                <div className="flex justify-between items-center">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Informações Extras</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleDetails(item.id)}
+                    className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+                  >
+                    Ocultar
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">Responsável pela execução (Executante)</label>
+                    <select
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 outline-none focus:ring-2 focus:ring-blue-200"
+                      value={resp.responsavel}
+                      onChange={(e) => handleRespChange(item.id, e.target.value)}
+                    >
+                      <option value="">Selecione executante...</option>
+                      <option value="Mecânica">Mecânica</option>
+                      <option value="Elétrica">Elétrica</option>
+                      <option value="Instrumentação">Instrumentação</option>
+                      <option value="Pintura / Estrutura">Pintura / Estrutura</option>
+                    </select>
+                  </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">Nota / Observação do Item</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Vazamento identificado na gaxeta..."
-                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
-                  value={resp.observacao}
-                  onChange={(e) => handleObsChange(item.id, e.target.value)}
-                />
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">Nota / Observação do Item</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Identificado desgaste sutil..."
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-905 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                      value={resp.observacao}
+                      onChange={(e) => handleObsChange(item.id, e.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       );
@@ -374,14 +405,14 @@ export const ChecklistPreenchimento: React.FC = () => {
     // Step `totalItens` is Materials consumed
     if (currentStep === totalItens) {
       return (
-        <div className="space-y-5 animate-fadeIn">
-          <Card title="Materiais Consumidos no Teste" subtitle="Selecione e registre materiais utilizados durante a manutenção">
+        <div className="space-y-5 animate-fadeIn w-full">
+          <Card title="Materiais Consumidos no Teste" subtitle="Selecione e registre materiais utilizados no After Cooler">
             <div className="space-y-4">
               <div className="space-y-3">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Material</label>
                   <select
-                    className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 outline-none"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-750 outline-none"
                     value={selectedMaterialId}
                     onChange={(e) => setSelectedMaterialId(e.target.value)}
                   >
@@ -399,7 +430,7 @@ export const ChecklistPreenchimento: React.FC = () => {
                     <input
                       type="number"
                       min="1"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs text-center outline-none"
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-center outline-none"
                       value={materialQty}
                       onChange={(e) => setMaterialQty(Math.max(1, parseInt(e.target.value) || 1))}
                     />
@@ -409,7 +440,7 @@ export const ChecklistPreenchimento: React.FC = () => {
                     <input
                       type="text"
                       placeholder="Troca preventiva..."
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none"
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none"
                       value={materialObs}
                       onChange={(e) => setMaterialObs(e.target.value)}
                     />
@@ -429,10 +460,10 @@ export const ChecklistPreenchimento: React.FC = () => {
 
               {/* List of currently added materials */}
               {materiaisUtilizados.length > 0 && (
-                <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
+                <div className="max-h-48 overflow-y-auto mt-4 pt-3 border-t border-slate-100 space-y-2">
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Materiais Adicionados:</span>
                   {materiaisUtilizados.map(mat => (
-                    <div key={mat.materialId} className="flex justify-between items-center bg-slate-50 border border-slate-150 p-2.5 rounded-xl text-xs">
+                    <div key={mat.materialId} className="flex justify-between items-center bg-slate-50 border border-slate-150 p-2 rounded-xl text-xs">
                       <div className="flex-1 pr-2">
                         <span className="font-bold text-slate-700 block leading-tight">{mat.material?.descricao}</span>
                         <span className="text-[10px] text-slate-400 block mt-0.5">SKU: {mat.material?.codigo} &bull; Qtd: {mat.quantidade} {mat.material?.unidade}</span>
@@ -458,14 +489,14 @@ export const ChecklistPreenchimento: React.FC = () => {
     // Step `totalItens + 1` is General Observations
     if (currentStep === totalItens + 1) {
       return (
-        <div className="space-y-5 animate-fadeIn">
+        <div className="space-y-5 animate-fadeIn w-full">
           <Card title="Observações Gerais da Inspeção" subtitle="Comentários adicionais referentes ao teste ou condições do After Cooler">
             <textarea
-              rows={5}
+              rows={6}
               placeholder="Descreva observações gerais referentes ao teste dinâmico de troca de temperatura ou outros eventos operacionais..."
-              className="w-full p-3 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+              className="w-full p-3 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
               value={observacoesGerais}
-              onChange={(e) => setObservacoesGears(e.target.value)}
+              onChange={(e) => setObservacoesGerais(e.target.value)}
             />
           </Card>
         </div>
@@ -475,7 +506,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     // Step `totalItens + 2` is Inspector Signature
     if (currentStep === totalItens + 2) {
       return (
-        <div className="space-y-6 animate-fadeIn">
+        <div className="space-y-6 animate-fadeIn w-full">
           <Card title="Assinatura do Inspetor" subtitle="Assine abaixo para encerrar e certificar o checklist">
             <div className="space-y-3">
               <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-inner relative">
@@ -520,10 +551,10 @@ export const ChecklistPreenchimento: React.FC = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto px-4 py-6 flex flex-col justify-between min-h-screen pb-24">
-      {/* Header and Step Progress bar */}
-      <div className="space-y-4">
-        <div className="flex items-center space-x-2 border-b border-slate-100 pb-3">
+    <div className="h-[100dvh] flex flex-col justify-between bg-slate-50 overflow-hidden select-none">
+      {/* Header and Step Progress bar (Fixed at top) */}
+      <div className="bg-white border-b border-slate-100 p-4 space-y-3 flex-shrink-0">
+        <div className="flex items-center space-x-2">
           <button onClick={handleBackToSelect} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500">
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -534,12 +565,12 @@ export const ChecklistPreenchimento: React.FC = () => {
         </div>
 
         {/* Progress metrics */}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <div className="flex justify-between text-[11px] font-bold text-slate-500">
             <span>Passo {currentStep + 1} de {totalSteps}</span>
             <span>{progressPercentage}% Concluído</span>
           </div>
-          <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
             <div 
               className="bg-blue-600 h-2 transition-all duration-300"
               style={{ width: `${progressPercentage}%` }}
@@ -548,20 +579,22 @@ export const ChecklistPreenchimento: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Form Step Area */}
-      <div className="flex-1 py-6">
-        {renderStepContent()}
+      {/* Main Content Area (Vertically Centered & Viewport height-constrained) */}
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col justify-center min-h-0">
+        <div className="max-w-md w-full mx-auto">
+          {renderStepContent()}
+        </div>
       </div>
 
-      {/* Bottom Sticky Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-150 p-4 shadow-lg z-50">
+      {/* Bottom Sticky Action Bar (Fixed at bottom) */}
+      <div className="bg-white border-t border-slate-150 p-4 shadow-lg flex-shrink-0 z-50">
         <div className="max-w-md mx-auto flex items-center justify-between gap-3">
           <Button
             type="button"
             variant="secondary"
             onClick={goToPrevStep}
             disabled={currentStep === 0}
-            className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs bg-white text-slate-700 border border-slate-250 disabled:opacity-40 disabled:pointer-events-none"
+            className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs bg-white text-slate-700 border border-slate-200 disabled:opacity-40 disabled:pointer-events-none"
           >
             <ChevronLeft className="h-4 w-4" />
             <span>Voltar</span>
