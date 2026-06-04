@@ -158,17 +158,6 @@ export const ChecklistPreenchimento: React.FC = () => {
       ...prev,
       [itemId]: { ...prev[itemId], status }
     }));
-    
-    // Auto-advance after status selection (unless they need to fill in certificates or it is PENDENTE)
-    const item = modelo?.itens?.find(i => i.id === itemId);
-    const isIdAndValid = item?.descricao.includes('(ID/VALID)');
-    const isValidOnly = item?.descricao.includes('(VALID)');
-    
-    if (status !== 'PENDENTE' && !isIdAndValid && !isValidOnly) {
-      autoAdvanceTimeoutRef.current = setTimeout(() => {
-        goToNextStep(true);
-      }, 250);
-    }
   };
 
 
@@ -386,14 +375,15 @@ export const ChecklistPreenchimento: React.FC = () => {
   const steps = getSteps();
   const totalSteps = steps.length;
 
-  function goToNextStep(bypassValidation = false) {
+  function goToNextStep(bypassValidation: boolean | any = false) {
     if (autoAdvanceTimeoutRef.current) {
       clearTimeout(autoAdvanceTimeoutRef.current);
       autoAdvanceTimeoutRef.current = null;
     }
 
     const step = steps[currentStep];
-    if (!bypassValidation && step.type === 'item' && step.itemIndex !== undefined) {
+    const shouldBypass = bypassValidation === true;
+    if (!shouldBypass && step.type === 'item' && step.itemIndex !== undefined) {
       const item = modelo?.itens?.[step.itemIndex];
       if (item) {
         const resp = respostas[item.id];
