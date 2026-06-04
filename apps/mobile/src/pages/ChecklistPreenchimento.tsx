@@ -13,19 +13,24 @@ export const ChecklistPreenchimento: React.FC = () => {
   
   // Respostas e Materiais catalog
   const [respostas, setRespostas] = useState<Record<string, { 
-    status: StatusItem; 
+    status?: StatusItem; 
     observacao: string; 
     responsavel: string;
     certificadoId?: string;
     certificadoValidade?: string;
     fotoBase64?: string;
+    pendenciaResolvida?: boolean;
+    fotoResolvidaBase64?: string;
   }>>({});
+  const [fotosEquipamento, setFotosEquipamento] = useState<(string | undefined)[]>([undefined, undefined, undefined]);
   const [materiaisDisponiveis, setMateriaisDisponiveis] = useState<Material[]>([]);
   const [materiaisUtilizados, setMateriaisUtilizados] = useState<Omit<MaterialUtilizado, 'id' | 'inspecaoId'>[]>([]);
   
   // Wizard Navigation State
   const [currentStep, setCurrentStep] = useState(0);
   const [showRespMap, setShowRespMap] = useState<Record<string, boolean>>({});
+  const autoAdvanceTimeoutRef = useRef<any>(null);
+
   
   // Adição de materiais local state
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
@@ -60,16 +65,18 @@ export const ChecklistPreenchimento: React.FC = () => {
             setModelo(mod);
             // Inicializar respostas em branco
             const initialRespostas: typeof respostas = {};
-            mod.itens?.forEach(item => {
-              initialRespostas[item.id] = {
-                status: 'OK',
-                observacao: '',
-                responsavel: '',
-                certificadoId: '',
-                certificadoValidade: '',
-                fotoBase64: undefined
-              };
-            });
+              mod.itens?.forEach(item => {
+                initialRespostas[item.id] = {
+                  status: undefined,
+                  observacao: '',
+                  responsavel: '',
+                  certificadoId: '',
+                  certificadoValidade: '',
+                  fotoBase64: undefined,
+                  pendenciaResolvida: undefined,
+                  fotoResolvidaBase64: undefined
+                };
+              });
             setRespostas(initialRespostas);
           }
         });
@@ -142,22 +149,28 @@ export const ChecklistPreenchimento: React.FC = () => {
 
   // Resposta status changer
   const handleStatusChange = (itemId: string, status: StatusItem) => {
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
+
     setRespostas(prev => ({
       ...prev,
       [itemId]: { ...prev[itemId], status }
     }));
     
-    // Auto-advance after status selection (unless they need to fill in certificates)
-    const item = modelo?.itens?.[currentStep];
+    // Auto-advance after status selection (unless they need to fill in certificates or it is PENDENTE)
+    const item = modelo?.itens?.find(i => i.id === itemId);
     const isIdAndValid = item?.descricao.includes('(ID/VALID)');
     const isValidOnly = item?.descricao.includes('(VALID)');
     
-    if (!isIdAndValid && !isValidOnly) {
-      setTimeout(() => {
-        goToNextStep();
+    if (status !== 'PENDENTE' && !isIdAndValid && !isValidOnly) {
+      autoAdvanceTimeoutRef.current = setTimeout(() => {
+        goToNextStep(true);
       }, 250);
     }
   };
+
 
   // Resposta comments/observações changer
   const handleObsChange = (itemId: string, observacao: string) => {
@@ -275,6 +288,8 @@ export const ChecklistPreenchimento: React.FC = () => {
       certificadoId: value.certificadoId || undefined,
       certificadoValidade: value.certificadoValidade || undefined,
       fotoBase64: value.fotoBase64 || undefined,
+      pendenciaResolvida: value.pendenciaResolvida !== undefined ? value.pendenciaResolvida : undefined,
+      fotoResolvidaBase64: value.fotoResolvidaBase64 || undefined,
     }));
 
     // Mapear materiais
@@ -301,7 +316,8 @@ export const ChecklistPreenchimento: React.FC = () => {
       origem: metadata.origem,
       destino: metadata.destino,
       compressorUtilizado: metadata.compressorUtilizado,
-      classificacao: metadata.classificacao
+      classificacao: metadata.classificacao,
+      fotosEquipamento: fotosEquipamento.filter((f): f is string => !!f)
     };
 
     await api.inspecoes.save(novaInspecao);
@@ -319,46 +335,157 @@ export const ChecklistPreenchimento: React.FC = () => {
   };
 
   // Helper selectors for steps navigation
-  const totalItens = modelo?.itens?.length || 0;
-  // Total Wizard steps: Checklist items (27) + Materials (1) + General Obs (1) + Signature (1) = 30 steps total
-  const totalSteps = totalItens + 3;
-
-  const goToNextStep = () => {
-    if (currentStep < totalSteps - 1) {
-      setCurrentStep(prev => prev + 1);
+  const getSteps = () => {
+    const list: { type: 'item' | 'materials' | 'pendencies' | 'equip_photos' | 'observations' | 'signature'; itemIndex?: number; label: string }[] = [];
+    
+    // 1. Checklist Items
+    modelo?.itens?.forEach((item, index) => {
+      list.push({
+        type: 'item',
+        itemIndex: index,
+        label: `Item ${item.ordem}`
+      });
+    });
+    
+    // 2. Materials
+    list.push({
+      type: 'materials',
+      label: 'Materiais'
+    });
+    
+    // 3. Pendency Resolution (only if there are pending items)
+    const temPendentes = Object.values(respostas).some(r => r.status === 'PENDENTE');
+    if (temPendentes) {
+      list.push({
+        type: 'pendencies',
+        label: 'Resolução de Pendências'
+      });
     }
+    
+    // 4. Equipment Photos
+    list.push({
+      type: 'equip_photos',
+      label: 'Fotos do Equipamento'
+    });
+    
+    // 5. General Observations
+    list.push({
+      type: 'observations',
+      label: 'Observações Gerais'
+    });
+    
+    // 6. Signature
+    list.push({
+      type: 'signature',
+      label: 'Assinatura'
+    });
+    
+    return list;
   };
+
+  const steps = getSteps();
+  const totalSteps = steps.length;
+
+  function goToNextStep(bypassValidation = false) {
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
+
+    const step = steps[currentStep];
+    if (!bypassValidation && step.type === 'item' && step.itemIndex !== undefined) {
+      const item = modelo?.itens?.[step.itemIndex];
+      if (item) {
+        const resp = respostas[item.id];
+        if (!resp || !resp.status) {
+          alert('Por favor, selecione uma opção (OK, Pendente ou N/A) para este item antes de avançar.');
+          return;
+        }
+        
+        // Se status for OK e necessitar certificado, validar se preenchidos
+        if (resp.status === 'OK') {
+          const isIdAndValid = item.descricao.includes('(ID/VALID)');
+          const isValidOnly = item.descricao.includes('(VALID)');
+          
+          if (isIdAndValid || isValidOnly) {
+            const hasId = !isIdAndValid || (resp.certificadoId && resp.certificadoId.trim());
+            const hasVal = resp.certificadoValidade && resp.certificadoValidade.trim();
+            
+            if (!hasId || !hasVal) {
+              alert('Por favor, preencha as informações de certificação (ID e/ou Validade) para este item antes de avançar.');
+              return;
+            }
+          }
+        }
+        
+        if (resp.status === 'PENDENTE' && (!resp.observacao || !resp.observacao.trim())) {
+          alert('Atenção: Ao marcar como Pendente, você deve detalhar o problema no campo de Observação.');
+          return;
+        }
+      }
+    } else if (step.type === 'pendencies') {
+      const pendingItems = modelo?.itens?.filter(it => respostas[it.id]?.status === 'PENDENTE') || [];
+      for (const item of pendingItems) {
+        const resp = respostas[item.id];
+        if (resp.pendenciaResolvida === undefined) {
+          alert(`Por favor, indique se a pendência do item "${item.descricao}" foi resolvida.`);
+          return;
+        }
+        if (resp.pendenciaResolvida && !resp.fotoResolvidaBase64) {
+          alert(`Por favor, anexe a foto de evidência para a pendência resolvida do item "${item.descricao}".`);
+          return;
+        }
+      }
+    } else if (step.type === 'equip_photos') {
+      const todasPreenchidas = fotosEquipamento.every(f => !!f);
+      if (!todasPreenchidas) {
+        alert('Por favor, anexe as 3 fotos obrigatórias do equipamento antes de prosseguir.');
+        return;
+      }
+    }
+
+    if (currentStep < totalSteps - 1) {
+      setCurrentStep(currentStep + 1);
+    }
+  }
 
   const goToPrevStep = () => {
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
     if (currentStep > 0) {
-      setCurrentStep(prev => prev - 1);
+      setCurrentStep(currentStep - 1);
     }
   };
 
-  const progressPercentage = Math.round(((currentStep + 1) / totalSteps) * 100);
+
+  const progressPercentage = totalSteps > 0 ? Math.round(((currentStep + 1) / totalSteps) * 100) : 0;
 
   // Active step rendering logic
   const renderStepContent = () => {
-    if (!modelo) return null;
+    if (!modelo || steps.length === 0) return null;
+    const step = steps[currentStep];
 
-    // Steps 0 to totalItens - 1 are individual checklist items
-    if (currentStep < totalItens) {
-      const item = modelo.itens?.[currentStep];
+    // Checklist Item step
+    if (step.type === 'item' && step.itemIndex !== undefined) {
+      const item = modelo.itens?.[step.itemIndex];
       if (!item) return null;
-      const resp = respostas[item.id] || { status: 'OK', observacao: '', responsavel: '', certificadoId: '', certificadoValidade: '', fotoBase64: undefined };
+      const resp = respostas[item.id] || { status: undefined, observacao: '', responsavel: '', certificadoId: '', certificadoValidade: '', fotoBase64: undefined };
       const isIdAndValid = item.descricao.includes('(ID/VALID)');
       const isValidOnly = item.descricao.includes('(VALID)');
+      const totalItens = modelo.itens?.length || 0;
 
       return (
         <div className="space-y-5 animate-fadeIn w-full">
-          {/* Section Indicator - Pill style */}
+          {/* Section Indicator */}
           <div className="flex justify-center">
             <span className="bg-blue-600 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-wider shadow-sm text-center">
               {item.secao}
             </span>
           </div>
 
-          {/* Item description card */}
+          {/* Item Description Card */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 text-center space-y-4">
             <div>
               <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1">Item {item.ordem} de {totalItens}</span>
@@ -367,7 +494,7 @@ export const ChecklistPreenchimento: React.FC = () => {
               </p>
             </div>
 
-            {/* Certificado Inputs & Photo Button inside the balloon */}
+            {/* Certificado Inputs */}
             {(isIdAndValid || isValidOnly) && (
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-4 text-left">
                 <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Informações de Certificação</span>
@@ -395,85 +522,70 @@ export const ChecklistPreenchimento: React.FC = () => {
                     />
                   </div>
                 </div>
-
-                {/* Evidência Fotográfica Button centered inside the balloon */}
-                <div className="flex flex-col items-center justify-center pt-2 border-t border-slate-200/60">
-                  {resp.fotoBase64 ? (
-                    <div className="relative inline-block mt-1">
-                      <img 
-                        src={resp.fotoBase64} 
-                        alt="Plaqueta" 
-                        className="h-16 w-28 object-cover rounded-lg border border-slate-300 shadow-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemovePhoto(item.id)}
-                        className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700 active:scale-90"
-                      >
-                        <Trash size={10} />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-lg shadow-sm cursor-pointer hover:bg-blue-50 transition text-[10px] font-bold">
-                      <Camera className="h-3.5 w-3.5" />
-                      <span>Anexar Foto da Plaqueta</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => handlePhotoChange(item.id, e)}
-                      />
-                    </label>
-                  )}
-                </div>
               </div>
             )}
           </div>
 
-          {/* Status Selection Buttons - Side-by-side Layout */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Status Selection Buttons - 3-button grid */}
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={() => handleStatusChange(item.id, 'OK')}
-              className={`py-3.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
+              className={`py-3.5 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border transition-all active:scale-98 ${
                 resp.status === 'OK'
-                  ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/10'
-                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  ? 'bg-green-600 border-green-600 text-white shadow-md shadow-green-500/10'
+                  : 'bg-white border-green-200 text-green-700 hover:bg-green-50'
               }`}
             >
               <Check className="h-4.5 w-4.5" />
-              <span>Verificado</span>
+              <span>OK</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleStatusChange(item.id, 'PENDENTE')}
+              className={`py-3.5 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border transition-all active:scale-98 ${
+                resp.status === 'PENDENTE'
+                  ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-md shadow-amber-500/10'
+                  : 'bg-white border-amber-255 text-amber-700 hover:bg-amber-50'
+              }`}
+            >
+              <AlertTriangle className="h-4.5 w-4.5" />
+              <span>Pendente</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleStatusChange(item.id, 'NAO_APLICAVEL')}
-              className={`py-3.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
+              className={`py-3.5 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border transition-all active:scale-98 ${
                 resp.status === 'NAO_APLICAVEL'
                   ? 'bg-slate-500 border-slate-500 text-white shadow-md shadow-slate-500/10'
-                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  : 'bg-white border-slate-350 text-slate-650 hover:bg-slate-50'
               }`}
             >
               <HelpCircle className="h-4.5 w-4.5" />
-              <span>Não se Aplica</span>
+              <span>N/A</span>
             </button>
           </div>
 
           {/* Observations and Responsável */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 shadow-sm">
-            {/* Input Observações */}
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Observações</label>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                Observações {resp.status === 'PENDENTE' && <span className="text-red-500">*</span>}
+              </label>
               <input
                 type="text"
-                placeholder="Descreva observações do item (opcional)..."
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                placeholder={resp.status === 'PENDENTE' ? "O que está pendente? (Obrigatório)..." : "Descreva observações do item (opcional)..."}
+                className={`w-full px-3 py-2 border rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200 ${
+                  resp.status === 'PENDENTE' && !resp.observacao.trim() ? 'border-red-300 focus:ring-red-200 focus:border-red-400' : 'border-slate-200'
+                }`}
                 value={resp.observacao}
                 onChange={(e) => handleObsChange(item.id, e.target.value)}
               />
             </div>
 
-            {/* Adicionar Responsável section */}
+            {/* Adicionar Responsável */}
             <div className="pt-1">
               {!showRespMap[item.id] && !resp.responsavel ? (
                 <button
@@ -513,8 +625,8 @@ export const ChecklistPreenchimento: React.FC = () => {
       );
     }
 
-    // Step `totalItens` is Materials consumed
-    if (currentStep === totalItens) {
+    // Materials Consumed step
+    if (step.type === 'materials') {
       return (
         <div className="space-y-5 animate-fadeIn w-full">
           <Card title="Materiais Consumidos no Teste" subtitle="Selecione e registre materiais utilizados no After Cooler">
@@ -569,7 +681,7 @@ export const ChecklistPreenchimento: React.FC = () => {
                 </Button>
               </div>
 
-              {/* List of currently added materials */}
+              {/* List of materials */}
               {materiaisUtilizados.length > 0 && (
                 <div className="max-h-48 overflow-y-auto mt-4 pt-3 border-t border-slate-100 space-y-2">
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Materiais Adicionados:</span>
@@ -597,8 +709,208 @@ export const ChecklistPreenchimento: React.FC = () => {
       );
     }
 
-    // Step `totalItens + 1` is General Observations
-    if (currentStep === totalItens + 1) {
+    // Pendency Resolution step (Conditional)
+    if (step.type === 'pendencies') {
+      const pendingItems = modelo?.itens?.filter(it => respostas[it.id]?.status === 'PENDENTE') || [];
+      return (
+        <div className="space-y-5 animate-fadeIn w-full">
+          <div className="text-center">
+            <span className="bg-amber-500 text-slate-950 text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-wider shadow-sm">
+              Auditoria de Pendências
+            </span>
+            <h2 className="text-sm font-bold text-slate-800 mt-3">Resolução de Não Conformidades</h2>
+            <p className="text-[11px] text-slate-400 mt-1">Sinalize quais pendências foram resolvidas e anexe evidências.</p>
+          </div>
+
+          <div className="space-y-4 max-h-[50dvh] overflow-y-auto pr-1">
+            {pendingItems.map(item => {
+              const resp = respostas[item.id];
+              return (
+                <div key={item.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
+                  <div>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Item {item.ordem}</span>
+                    <p className="text-xs font-bold text-slate-800">{item.descricao}</p>
+                    <p className="text-[11px] text-slate-500 mt-1.5 italic bg-slate-50 p-2 border border-slate-100 rounded-lg">
+                      <strong>Pendente:</strong> {resp.observacao}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold text-slate-700">Pendência Resolvida?</span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRespostas(prev => ({
+                              ...prev,
+                              [item.id]: { ...prev[item.id], pendenciaResolvida: true }
+                            }));
+                          }}
+                          className={`px-4 py-1.5 rounded-lg text-xs font-extrabold transition-all ${
+                            resp.pendenciaResolvida === true
+                              ? 'bg-green-600 text-white shadow-sm'
+                              : 'bg-slate-100 text-slate-650 hover:bg-slate-200'
+                          }`}
+                        >
+                          Sim
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRespostas(prev => ({
+                              ...prev,
+                              [item.id]: { 
+                                ...prev[item.id], 
+                                pendenciaResolvida: false,
+                                fotoResolvidaBase64: undefined
+                              }
+                            }));
+                          }}
+                          className={`px-4 py-1.5 rounded-lg text-xs font-extrabold transition-all ${
+                            resp.pendenciaResolvida === false
+                              ? 'bg-red-600 text-white shadow-sm'
+                              : 'bg-slate-100 text-slate-650 hover:bg-slate-200'
+                          }`}
+                        >
+                          Não
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Camera upload if resolved is YES */}
+                    {resp.pendenciaResolvida === true && (
+                      <div className="flex flex-col items-center justify-center p-3 bg-slate-50 border border-dashed border-slate-250 rounded-xl">
+                        {resp.fotoResolvidaBase64 ? (
+                          <div className="relative inline-block">
+                            <img
+                              src={resp.fotoResolvidaBase64}
+                              alt="Reparo resolvido"
+                              className="h-24 w-40 object-cover rounded-lg border border-slate-300 shadow-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRespostas(prev => ({
+                                  ...prev,
+                                  [item.id]: { ...prev[item.id], fotoResolvidaBase64: undefined }
+                                }));
+                              }}
+                              className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700"
+                            >
+                              <Trash size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center cursor-pointer gap-2 py-3 w-full">
+                            <Camera className="h-6 w-6 text-blue-600" />
+                            <span className="text-[10px] font-bold text-blue-600 uppercase">Tirar Foto do Reparo (Obrigatório)</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    setRespostas(prev => ({
+                                      ...prev,
+                                      [item.id]: { ...prev[item.id], fotoResolvidaBase64: reader.result as string }
+                                    }));
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // Equipment Photos step (3 mandatory photos)
+    if (step.type === 'equip_photos') {
+      return (
+        <div className="space-y-5 animate-fadeIn w-full">
+          <div className="text-center">
+            <span className="bg-blue-600 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-wider shadow-sm">
+              Evidências Gerais
+            </span>
+            <h2 className="text-sm font-bold text-slate-800 mt-3">Fotos do Equipamento</h2>
+            <p className="text-[11px] text-slate-400 mt-1">Anexe exatamente 3 fotos gerais para liberação do equipamento.</p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            {[0, 1, 2].map(idx => {
+              const label = idx === 0 ? 'Foto 1' : idx === 1 ? 'Foto 2' : 'Foto 3';
+              const foto = fotosEquipamento[idx];
+              return (
+                <div key={idx} className="bg-white rounded-2xl border border-slate-200 p-3 flex flex-col items-center justify-center min-h-[140px] text-center shadow-sm space-y-2">
+                  <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">{label}</span>
+                  {foto ? (
+                    <div className="relative w-full aspect-square flex items-center justify-center bg-slate-50 border border-slate-100 rounded-lg overflow-hidden">
+                      <img
+                        src={foto}
+                        alt={label}
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFotosEquipamento(prev => {
+                            const updated = [...prev];
+                            updated[idx] = undefined;
+                            return updated;
+                          });
+                        }}
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700 active:scale-90"
+                      >
+                        <Trash size={10} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center border border-dashed border-slate-200 rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition w-full aspect-square">
+                      <Camera className="h-4.5 w-4.5 text-slate-400" />
+                      <span className="text-[8px] font-bold text-slate-500 uppercase mt-1">Anexar</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setFotosEquipamento(prev => {
+                                const updated = [...prev];
+                                updated[idx] = reader.result as string;
+                                return updated;
+                              });
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // General Observations step
+    if (step.type === 'observations') {
       return (
         <div className="space-y-5 animate-fadeIn w-full">
           <Card title="Observações Gerais da Inspeção" subtitle="Comentários adicionais referentes ao teste ou condições do After Cooler">
@@ -614,8 +926,8 @@ export const ChecklistPreenchimento: React.FC = () => {
       );
     }
 
-    // Step `totalItens + 2` is Inspector Signature
-    if (currentStep === totalItens + 2) {
+    // Signature step
+    if (step.type === 'signature') {
       return (
         <div className="space-y-6 animate-fadeIn w-full">
           <Card title="Assinatura do Inspetor" subtitle="Assine abaixo para encerrar e certificar o checklist">
@@ -663,7 +975,7 @@ export const ChecklistPreenchimento: React.FC = () => {
 
   return (
     <div className="h-[100dvh] flex flex-col justify-between bg-slate-50 overflow-hidden select-none">
-      {/* Header and Step Progress bar (Fixed at top) */}
+      {/* Header and Step Progress bar */}
       <div className="bg-white border-b border-slate-100 p-4 space-y-3 flex-shrink-0">
         <div className="flex items-center space-x-2">
           <button onClick={handleBackToSelect} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500">
@@ -692,14 +1004,14 @@ export const ChecklistPreenchimento: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Content Area (Vertically Centered & Viewport height-constrained) */}
+      {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col justify-center min-h-0">
         <div className="max-w-md w-full mx-auto">
           {renderStepContent()}
         </div>
       </div>
 
-      {/* Bottom Sticky Action Bar (Fixed at bottom) */}
+      {/* Bottom Sticky Action Bar */}
       <div className="bg-white border-t border-slate-150 p-4 shadow-lg flex-shrink-0 z-50">
         <div className="max-w-md mx-auto flex items-center justify-between gap-3">
           <Button

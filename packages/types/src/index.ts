@@ -52,10 +52,12 @@ export interface RespostaItem {
   itemId: string;
   status: StatusItem;
   observacao?: string;
-  responsavel?: string; // Quem executou aquela tarefa específica (e.g. elétrica, pintura, etc.)
+  responsavel?: string; // Quem executou aquela verificação
   certificadoId?: string;
   certificadoValidade?: string;
-  fotoBase64?: string; // Evidência fotográfica da plaqueta / verificação
+  fotoBase64?: string; // Mantido por compatibilidade
+  pendenciaResolvida?: boolean; // Se a pendência foi resolvida em campo
+  fotoResolvidaBase64?: string; // Foto da pendência resolvida
   createdById?: string;
   item?: ItemChecklist;
 }
@@ -99,5 +101,5 @@ export interface Inspecao {
   destino?: string;
   compressorUtilizado?: string;
   classificacao?: string;
+  fotosEquipamento?: string[]; // Três fotos obrigatórias do equipamento
 }
-

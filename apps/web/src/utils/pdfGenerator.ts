@@ -69,8 +69,10 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
   // 3. Tabela de Respostas do Checklist
   const itemRows = inspecao.respostas.map((resp) => {
     let statusText = 'N/A';
-    if (resp.status === 'OK') statusText = 'APROVADO';
-    if (resp.status === 'PENDENTE') statusText = 'REPROVADO';
+    if (resp.status === 'OK') statusText = 'OK';
+    if (resp.status === 'PENDENTE') {
+      statusText = resp.pendenciaResolvida ? 'RESOLVIDO' : 'PENDENTE';
+    }
 
     let descText = resp.item?.descricao || 'Sem descrição';
     if (resp.certificadoId || resp.certificadoValidade) {
@@ -116,9 +118,9 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
       // Colorir a coluna do status
       if (data.column.index === 2 && data.section === 'body') {
         const val = data.cell.raw;
-        if (val === 'APROVADO') {
+        if (val === 'OK' || val === 'RESOLVIDO') {
           data.cell.styles.textColor = successColor;
-        } else if (val === 'REPROVADO') {
+        } else if (val === 'PENDENTE') {
           data.cell.styles.textColor = dangerColor;
         } else {
           data.cell.styles.textColor = grayColor;
@@ -218,37 +220,70 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
     }
   }
 
-  // 7. Anexo Fotográfico de Evidências (Plaquetas)
-  const fotosValidas = inspecao.respostas.filter(r => r.fotoBase64);
-  if (fotosValidas.length > 0) {
+  // 7. Anexo Fotográfico: Fotos do Equipamento e Resoluções de Pendências
+  const fotosEquipamento = inspecao.fotosEquipamento || [];
+  const fotosResolvidas = inspecao.respostas.filter(r => r.status === 'PENDENTE' && r.pendenciaResolvida && r.fotoResolvidaBase64);
+  
+  if (fotosEquipamento.length > 0 || fotosResolvidas.length > 0) {
     doc.addPage();
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text('ANEXO FOTOGRÁFICO DE EVIDÊNCIAS', 10, 20);
+    doc.text('ANEXO FOTOGRÁFICO', 10, 20);
     
     let photoY = 30;
     
-    fotosValidas.forEach((resp, idx) => {
+    // 7a. Fotos do Equipamento
+    if (fotosEquipamento.length > 0) {
+      doc.setFontSize(10);
+      doc.text('Fotos Gerais do Equipamento:', 10, photoY);
+      photoY += 8;
+      
+      fotosEquipamento.forEach((foto, idx) => {
+        try {
+          doc.addImage(foto, 'PNG', 10 + idx * 63, photoY, 58, 40);
+        } catch (err) {
+          console.error('Erro ao renderizar foto do equipamento no PDF', err);
+        }
+      });
+      photoY += 48;
+    }
+    
+    // 7b. Fotos de Resoluções de Pendências
+    if (fotosResolvidas.length > 0) {
       if (photoY > 220) {
         doc.addPage();
         photoY = 20;
       }
       
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.text(`Evidência #${idx + 1} - Item ${resp.item?.ordem}: ${resp.item?.descricao || 'Verificação'}`, 10, photoY);
-      photoY += 4;
+      doc.setFontSize(10);
+      doc.text('Resolução de Pendências (Evidências de Reparo):', 10, photoY);
+      photoY += 8;
       
-      if (resp.fotoBase64) {
-        try {
-          doc.addImage(resp.fotoBase64, 'PNG', 10, photoY, 60, 40);
-          photoY += 46;
-        } catch (err) {
-          console.error('Erro ao renderizar imagem de evidência no PDF', err);
-          photoY += 5;
+      fotosResolvidas.forEach((resp, idx) => {
+        if (photoY > 200) {
+          doc.addPage();
+          photoY = 20;
         }
-      }
-    });
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.text(`Evidência de Reparo #${idx + 1} - Item ${resp.item?.ordem}: ${resp.item?.descricao || 'Pendência'}`, 10, photoY);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Observação original: ${resp.observacao || ''}`, 10, photoY + 4);
+        photoY += 8;
+        
+        if (resp.fotoResolvidaBase64) {
+          try {
+            doc.addImage(resp.fotoResolvidaBase64, 'PNG', 10, photoY, 60, 40);
+            photoY += 46;
+          } catch (err) {
+            console.error('Erro ao renderizar foto da resolução no PDF', err);
+            photoY += 5;
+          }
+        }
+      });
+    }
   }
 
   // Baixar documento

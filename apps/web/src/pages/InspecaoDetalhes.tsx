@@ -205,9 +205,35 @@ export const InspecaoDetalhes: React.FC = () => {
                           )}
                         </div>
                       )}
+
+                      {/* Evidência de Resolução */}
+                      {resp.status === 'PENDENTE' && resp.pendenciaResolvida && resp.fotoResolvidaBase64 && (
+                        <div className="mt-2.5">
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Evidência de Resolução (Reparo)</span>
+                          <img 
+                            src={resp.fotoResolvidaBase64} 
+                            alt="Foto da Pendência Resolvida" 
+                            className="h-16 w-28 object-cover rounded-lg border border-slate-200 shadow-sm cursor-zoom-in hover:opacity-90 transition"
+                            onClick={() => {
+                              const newTab = window.open();
+                              if (newTab) {
+                                newTab.document.write(`<img src="${resp.fotoResolvidaBase64}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                     <div className="flex-shrink-0">
-                      <Badge type={resp.status} />
+                      {resp.status === 'PENDENTE' ? (
+                        resp.pendenciaResolvida ? (
+                          <Badge type="success" label="Resolvido em Campo" />
+                        ) : (
+                          <Badge type="danger" label="Pendente Ativo" />
+                        )
+                      ) : (
+                        <Badge type={resp.status} />
+                      )}
                     </div>
                   </div>
                 ))}
@@ -219,6 +245,29 @@ export const InspecaoDetalhes: React.FC = () => {
         {/* Right Column: Consumed Materials & Digital Signature */}
         <div className="space-y-6">
           
+          {/* Fotos do Equipamento */}
+          {inspecao.fotosEquipamento && inspecao.fotosEquipamento.length > 0 && (
+            <Card title="Fotos do Equipamento">
+              <div className="grid grid-cols-3 gap-2">
+                {inspecao.fotosEquipamento.map((foto, idx) => (
+                  <div key={idx} className="aspect-square rounded-lg border border-slate-200 overflow-hidden bg-slate-50 relative group">
+                    <img 
+                      src={foto} 
+                      alt={`Foto do Equipamento ${idx + 1}`} 
+                      className="w-full h-full object-cover cursor-zoom-in hover:opacity-90 transition"
+                      onClick={() => {
+                        const newTab = window.open();
+                        if (newTab) {
+                          newTab.document.write(`<img src="${foto}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                        }
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           {/* Materials Consumed Card */}
           <Card title="Materiais Utilizados">
             {inspecao.materiais.length === 0 ? (

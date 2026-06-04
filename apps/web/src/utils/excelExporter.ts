@@ -78,7 +78,10 @@ export const exportSingleInspectionToExcel = (inspecao: Inspecao): void => {
   // Aba 2: Itens do Checklist
   const itens = inspecao.respostas.map(resp => {
     let statusText = 'N/A';
-    if (resp.status === 'OK') statusText = 'VERIFICADO';
+    if (resp.status === 'OK') statusText = 'OK';
+    if (resp.status === 'PENDENTE') {
+      statusText = resp.pendenciaResolvida ? 'RESOLVIDO EM CAMPO' : 'PENDENTE ATIVO';
+    }
     
     return {
       'Ordem': resp.item?.ordem || 0,
@@ -86,9 +89,10 @@ export const exportSingleInspectionToExcel = (inspecao: Inspecao): void => {
       'Descrição do Item': resp.item?.descricao || 'N/A',
       'Certificado ID': resp.certificadoId || '',
       'Validade Certificado': resp.certificadoValidade || '',
-      'Evidência Anexa': resp.fotoBase64 ? 'SIM' : 'NÃO',
       'Status': statusText,
       'Observação do Item': resp.observacao || '',
+      'Pendência Resolvida?': resp.pendenciaResolvida !== undefined ? (resp.pendenciaResolvida ? 'SIM' : 'NÃO') : 'N/A',
+      'Foto Reparo Anexa?': resp.fotoResolvidaBase64 ? 'SIM' : 'NÃO',
       'Executante': resp.responsavel || ''
     };
   });
