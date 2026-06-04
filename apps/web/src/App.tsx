@@ -15,11 +15,13 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex h-screen bg-[#cbd5c0] p-4 gap-4 overflow-hidden font-sans">
       <Sidebar />
-      <main className="flex-1 p-8 overflow-y-auto">
-        {children}
-      </main>
+      <div className="flex-1 bg-[#f3f5f4] rounded-[2.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.06)] overflow-y-auto border border-slate-200/30">
+        <main className="p-6 md:p-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 };
