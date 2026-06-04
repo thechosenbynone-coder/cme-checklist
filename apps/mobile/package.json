@@ -11,6 +11,8 @@
     "cap:build": "cap build"
   },
   "dependencies": {
+    "@cme/types": "*",
+    "@cme/ui": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.23.1",
@@ -19,6 +21,7 @@
     "jspdf-autotable": "^3.8.2",
     "xlsx": "^0.18.5"
   },
+
   "devDependencies": {
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
