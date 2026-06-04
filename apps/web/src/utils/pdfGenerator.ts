@@ -218,7 +218,41 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
     }
   }
 
+  // 7. Anexo Fotográfico de Evidências (Plaquetas)
+  const fotosValidas = inspecao.respostas.filter(r => r.fotoBase64);
+  if (fotosValidas.length > 0) {
+    doc.addPage();
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('ANEXO FOTOGRÁFICO DE EVIDÊNCIAS', 10, 20);
+    
+    let photoY = 30;
+    
+    fotosValidas.forEach((resp, idx) => {
+      if (photoY > 220) {
+        doc.addPage();
+        photoY = 20;
+      }
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.text(`Evidência #${idx + 1} - Item ${resp.item?.ordem}: ${resp.item?.descricao || 'Verificação'}`, 10, photoY);
+      photoY += 4;
+      
+      if (resp.fotoBase64) {
+        try {
+          doc.addImage(resp.fotoBase64, 'PNG', 10, photoY, 60, 40);
+          photoY += 46;
+        } catch (err) {
+          console.error('Erro ao renderizar imagem de evidência no PDF', err);
+          photoY += 5;
+        }
+      }
+    });
+  }
+
   // Baixar documento
   const fileName = `Checklist_${inspecao.equipamento?.codigo || 'Equipamento'}_${new Date(inspecao.data).toISOString().split('T')[0]}.pdf`;
   doc.save(fileName);
 };
+

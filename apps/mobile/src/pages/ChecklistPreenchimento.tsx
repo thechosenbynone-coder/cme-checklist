@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, AlertTriangle, HelpCircle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Calendar, FileText } from 'lucide-react';
+import { ArrowLeft, Check, AlertTriangle, HelpCircle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Camera } from 'lucide-react';
 import { Card, Button } from '@cme/ui';
 import api from '../services/api';
 import { Equipamento, ChecklistModelo, Material, Inspecao, RespostaItem, MaterialUtilizado, StatusItem } from '@cme/types';
@@ -18,13 +18,14 @@ export const ChecklistPreenchimento: React.FC = () => {
     responsavel: string;
     certificadoId?: string;
     certificadoValidade?: string;
+    fotoBase64?: string;
   }>>({});
   const [materiaisDisponiveis, setMateriaisDisponiveis] = useState<Material[]>([]);
   const [materiaisUtilizados, setMateriaisUtilizados] = useState<Omit<MaterialUtilizado, 'id' | 'inspecaoId'>[]>([]);
   
   // Wizard Navigation State
   const [currentStep, setCurrentStep] = useState(0);
-  const [showDetailsMap, setShowDetailsMap] = useState<Record<string, boolean>>({});
+  const [showRespMap, setShowRespMap] = useState<Record<string, boolean>>({});
   
   // Adição de materiais local state
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
@@ -65,7 +66,8 @@ export const ChecklistPreenchimento: React.FC = () => {
                 observacao: '',
                 responsavel: '',
                 certificadoId: '',
-                certificadoValidade: ''
+                certificadoValidade: '',
+                fotoBase64: undefined
               };
             });
             setRespostas(initialRespostas);
@@ -130,9 +132,9 @@ export const ChecklistPreenchimento: React.FC = () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  // Toggle details visibility for observations and responsible per item
-  const toggleDetails = (itemId: string) => {
-    setShowDetailsMap(prev => ({
+  // Toggle executante field trigger
+  const toggleResp = (itemId: string) => {
+    setShowRespMap(prev => ({
       ...prev,
       [itemId]: !prev[itemId]
     }));
@@ -153,7 +155,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     if (!isIdAndValid && !isValidOnly) {
       setTimeout(() => {
         goToNextStep();
-      }, 280);
+      }, 250);
     }
   };
 
@@ -186,6 +188,28 @@ export const ChecklistPreenchimento: React.FC = () => {
     setRespostas(prev => ({
       ...prev,
       [itemId]: { ...prev[itemId], certificadoValidade }
+    }));
+  };
+
+  // Photo handlers
+  const handlePhotoChange = (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setRespostas(prev => ({
+          ...prev,
+          [itemId]: { ...prev[itemId], fotoBase64: reader.result as string }
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemovePhoto = (itemId: string) => {
+    setRespostas(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], fotoBase64: undefined }
     }));
   };
 
@@ -250,6 +274,7 @@ export const ChecklistPreenchimento: React.FC = () => {
       responsavel: value.responsavel || undefined,
       certificadoId: value.certificadoId || undefined,
       certificadoValidade: value.certificadoValidade || undefined,
+      fotoBase64: value.fotoBase64 || undefined,
     }));
 
     // Mapear materiais
@@ -320,8 +345,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     if (currentStep < totalItens) {
       const item = modelo.itens?.[currentStep];
       if (!item) return null;
-      const resp = respostas[item.id] || { status: 'OK', observacao: '', responsavel: '', certificadoId: '', certificadoValidade: '' };
-      const hasDetails = !!showDetailsMap[item.id];
+      const resp = respostas[item.id] || { status: 'OK', observacao: '', responsavel: '', certificadoId: '', certificadoValidade: '', fotoBase64: undefined };
       const isIdAndValid = item.descricao.includes('(ID/VALID)');
       const isValidOnly = item.descricao.includes('(VALID)');
 
@@ -335,15 +359,17 @@ export const ChecklistPreenchimento: React.FC = () => {
           </div>
 
           {/* Item description card */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 text-center">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block mb-2">Item {item.ordem} de {totalItens}</span>
-            <p className="text-sm font-extrabold text-slate-800 leading-relaxed">
-              {item.descricao}
-            </p>
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 text-center space-y-4">
+            <div>
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1">Item {item.ordem} de {totalItens}</span>
+              <p className="text-sm font-extrabold text-slate-800 leading-relaxed">
+                {item.descricao}
+              </p>
+            </div>
 
-            {/* Certificado Inputs integrated directly on card */}
+            {/* Certificado Inputs & Photo Button inside the balloon */}
             {(isIdAndValid || isValidOnly) && (
-              <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3 text-left">
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-4 text-left">
                 <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Informações de Certificação</span>
                 <div className="grid grid-cols-2 gap-2">
                   {isIdAndValid && (
@@ -369,45 +395,63 @@ export const ChecklistPreenchimento: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {/* Evidência Fotográfica Button centered inside the balloon */}
+                <div className="flex flex-col items-center justify-center pt-2 border-t border-slate-200/60">
+                  {resp.fotoBase64 ? (
+                    <div className="relative inline-block mt-1">
+                      <img 
+                        src={resp.fotoBase64} 
+                        alt="Plaqueta" 
+                        className="h-16 w-28 object-cover rounded-lg border border-slate-300 shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePhoto(item.id)}
+                        className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700 active:scale-90"
+                      >
+                        <Trash size={10} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-lg shadow-sm cursor-pointer hover:bg-blue-50 transition text-[10px] font-bold">
+                      <Camera className="h-3.5 w-3.5" />
+                      <span>Anexar Foto da Plaqueta</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handlePhotoChange(item.id, e)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Status Selection Buttons Stack */}
-          <div className="flex flex-col gap-2.5">
+          {/* Status Selection Buttons - Side-by-side Layout */}
+          <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
               onClick={() => handleStatusChange(item.id, 'OK')}
-              className={`w-full py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
+              className={`py-3.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
                 resp.status === 'OK'
-                  ? 'bg-green-600 border-green-600 text-white shadow-md shadow-green-600/10'
-                  : 'bg-white border-slate-250 text-slate-700 hover:bg-slate-50'
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/10'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
             >
               <Check className="h-4.5 w-4.5" />
-              <span>Aprovado</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleStatusChange(item.id, 'PENDENTE')}
-              className={`w-full py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
-                resp.status === 'PENDENTE'
-                  ? 'bg-red-600 border-red-600 text-white shadow-md shadow-red-600/10'
-                  : 'bg-white border-slate-250 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <AlertTriangle className="h-4.5 w-4.5" />
-              <span>Reprovado</span>
+              <span>Verificado</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleStatusChange(item.id, 'NAO_APLICAVEL')}
-              className={`w-full py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
+              className={`py-3.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 border transition-all active:scale-98 ${
                 resp.status === 'NAO_APLICAVEL'
                   ? 'bg-slate-500 border-slate-500 text-white shadow-md shadow-slate-500/10'
-                  : 'bg-white border-slate-250 text-slate-700 hover:bg-slate-50'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
             >
               <HelpCircle className="h-4.5 w-4.5" />
@@ -415,54 +459,55 @@ export const ChecklistPreenchimento: React.FC = () => {
             </button>
           </div>
 
-          {/* Optional Details Collapse trigger */}
-          <div className="space-y-2">
-            {!hasDetails ? (
-              <button
-                type="button"
-                onClick={() => toggleDetails(item.id)}
-                className="w-full text-center text-xs font-semibold text-slate-450 hover:text-slate-700 py-2 border border-dashed border-slate-300 rounded-xl bg-white hover:bg-slate-50 transition"
-              >
-                + Adicionar Obs. ou Nome do Executante
-              </button>
-            ) : (
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-sm animate-slideDown">
-                <div className="flex justify-between items-center">
-                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Detalhes Adicionais</span>
-                  <button
-                    type="button"
-                    onClick={() => toggleDetails(item.id)}
-                    className="text-xs text-slate-400 hover:text-slate-650 font-bold"
-                  >
-                    Ocultar
-                  </button>
-                </div>
-                
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-[9px] font-bold text-slate-500 mb-1">Nome do Executante</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: João da Silva (Elétrica)"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                      value={resp.responsavel}
-                      onChange={(e) => handleRespChange(item.id, e.target.value)}
-                    />
-                  </div>
+          {/* Observations and Responsável */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 shadow-sm">
+            {/* Input Observações */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Observações</label>
+              <input
+                type="text"
+                placeholder="Descreva observações do item (opcional)..."
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                value={resp.observacao}
+                onChange={(e) => handleObsChange(item.id, e.target.value)}
+              />
+            </div>
 
-                  <div>
-                    <label className="block text-[9px] font-bold text-slate-500 mb-1">Observação do Item</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Necessário substituição de cabo..."
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                      value={resp.observacao}
-                      onChange={(e) => handleObsChange(item.id, e.target.value)}
-                    />
+            {/* Adicionar Responsável section */}
+            <div className="pt-1">
+              {!showRespMap[item.id] && !resp.responsavel ? (
+                <button
+                  type="button"
+                  onClick={() => toggleResp(item.id)}
+                  className="w-full text-center text-xs font-semibold text-blue-600 hover:text-blue-750 py-2 border border-dashed border-blue-200 rounded-lg bg-blue-50/10 transition"
+                >
+                  + Adicionar Responsável (Executante)
+                </button>
+              ) : (
+                <div className="space-y-1.5 animate-slideDown">
+                  <div className="flex justify-between items-center">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase">Responsável (Executante)</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleRespChange(item.id, '');
+                        toggleResp(item.id);
+                      }}
+                      className="text-[9px] text-red-500 hover:text-red-700 font-bold"
+                    >
+                      Remover
+                    </button>
                   </div>
+                  <input
+                    type="text"
+                    placeholder="Nome de quem executou a verificação"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                    value={resp.responsavel}
+                    onChange={(e) => handleRespChange(item.id, e.target.value)}
+                  />
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       );
@@ -538,7 +583,7 @@ export const ChecklistPreenchimento: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleRemoveMaterial(mat.materialId)}
-                        className="p-1.5 text-slate-450 hover:text-red-500 hover:bg-red-50 rounded"
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
                       >
                         <Trash className="h-4 w-4" />
                       </button>

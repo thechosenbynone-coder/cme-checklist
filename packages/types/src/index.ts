@@ -55,9 +55,11 @@ export interface RespostaItem {
   responsavel?: string; // Quem executou aquela tarefa específica (e.g. elétrica, pintura, etc.)
   certificadoId?: string;
   certificadoValidade?: string;
+  fotoBase64?: string; // Evidência fotográfica da plaqueta / verificação
   createdById?: string;
   item?: ItemChecklist;
 }
+
 
 
 export interface Material {

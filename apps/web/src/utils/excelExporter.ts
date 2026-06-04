@@ -6,7 +6,6 @@ export const exportInspectionsToExcel = (inspecoes: Inspecao[]): void => {
   const rows = inspecoes.map(insp => {
     // Contagem de status
     const okCount = insp.respostas.filter(r => r.status === 'OK').length;
-    const pendingCount = insp.respostas.filter(r => r.status === 'PENDENTE').length;
     const naCount = insp.respostas.filter(r => r.status === 'NAO_APLICAVEL').length;
     
     // Contagem de materiais
@@ -19,18 +18,18 @@ export const exportInspectionsToExcel = (inspecoes: Inspecao[]): void => {
       'Tipo de Equipamento': insp.equipamento?.tipo || 'N/A',
       'Tipo de Inspeção': insp.tipo.replace('_', ' '),
       'Data / Hora': new Date(insp.data).toLocaleString('pt-BR'),
-      'Status Geral': insp.status === 'CONCLUIDA' || insp.status === 'VALIDADA' ? 'APROVADO' : insp.status,
+      'Status Geral': insp.status === 'CONCLUIDA' || insp.status === 'VALIDADA' ? 'CONCLUÍDO' : insp.status,
       'Responsável': insp.responsavelGeral || 'N/A',
       'Localização': insp.localizacao || 'N/A',
       'Origem': insp.origem || 'N/A',
       'Destino': insp.destino || 'N/A',
-      'Itens Aprovados': okCount,
-      'Itens Reprovados': pendingCount,
+      'Itens Verificados': okCount,
       'Itens N/A': naCount,
       'Total Itens': insp.respostas.length,
       'Materiais Utilizados (Qtd)': materialQuantity,
       'Observações Gerais': insp.observacoesGerais || ''
     };
+
   });
 
   // Criar planilha do Excel
@@ -79,8 +78,7 @@ export const exportSingleInspectionToExcel = (inspecao: Inspecao): void => {
   // Aba 2: Itens do Checklist
   const itens = inspecao.respostas.map(resp => {
     let statusText = 'N/A';
-    if (resp.status === 'OK') statusText = 'APROVADO';
-    if (resp.status === 'PENDENTE') statusText = 'REPROVADO';
+    if (resp.status === 'OK') statusText = 'VERIFICADO';
     
     return {
       'Ordem': resp.item?.ordem || 0,
@@ -88,11 +86,13 @@ export const exportSingleInspectionToExcel = (inspecao: Inspecao): void => {
       'Descrição do Item': resp.item?.descricao || 'N/A',
       'Certificado ID': resp.certificadoId || '',
       'Validade Certificado': resp.certificadoValidade || '',
+      'Evidência Anexa': resp.fotoBase64 ? 'SIM' : 'NÃO',
       'Status': statusText,
       'Observação do Item': resp.observacao || '',
       'Executante': resp.responsavel || ''
     };
   });
+
   const wsItens = XLSX.utils.json_to_sheet(itens);
   XLSX.utils.book_append_sheet(workbook, wsItens, 'Checklist');
 

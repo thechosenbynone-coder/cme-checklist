@@ -160,7 +160,7 @@ export const InspecaoDetalhes: React.FC = () => {
 
                       {/* Certificados info if present */}
                       {(resp.certificadoId || resp.certificadoValidade) && (
-                        <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-550 font-medium bg-slate-50 border border-slate-100 p-2 rounded-lg max-w-fit">
+                        <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-555 font-medium bg-slate-50 border border-slate-100 p-2 rounded-lg max-w-fit">
                           {resp.certificadoId && (
                             <span><strong className="text-slate-700">Certificado ID:</strong> {resp.certificadoId}</span>
                           )}
@@ -169,6 +169,25 @@ export const InspecaoDetalhes: React.FC = () => {
                           )}
                         </div>
                       )}
+
+                      {/* Evidência Fotográfica da Plaqueta */}
+                      {resp.fotoBase64 && (
+                        <div className="mt-2.5">
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Evidência Fotográfica</span>
+                          <img 
+                            src={resp.fotoBase64} 
+                            alt="Foto da Plaqueta" 
+                            className="h-16 w-28 object-cover rounded-lg border border-slate-200 shadow-sm cursor-zoom-in hover:opacity-90 transition"
+                            onClick={() => {
+                              const newTab = window.open();
+                              if (newTab) {
+                                newTab.document.write(`<img src="${resp.fotoBase64}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+
 
                       {(resp.observacao || (resp.responsavel && resp.responsavel.trim())) && (
                         <div className="flex flex-wrap gap-2 mt-1.5">
