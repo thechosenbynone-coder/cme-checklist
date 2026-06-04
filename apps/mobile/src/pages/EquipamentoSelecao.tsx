@@ -55,7 +55,7 @@ export const EquipamentoSelecao: React.FC = () => {
   return (
     <div className="max-w-md mx-auto px-4 py-8 space-y-6">
       <div className="text-center">
-        <div className="mx-auto h-12 w-12 rounded-xl bg-blue-600 text-white grid place-items-center mb-3 shadow-md shadow-blue-500/10">
+        <div className="mx-auto h-12 w-12 rounded-xl bg-[#0b132b] text-[#38bdf8] grid place-items-center mb-3 shadow-md shadow-blue-900/10">
           <ShieldCheck className="h-7 w-7" />
         </div>
         <h1 className="text-lg font-bold text-slate-900 leading-tight uppercase tracking-tight">
@@ -98,7 +98,7 @@ export const EquipamentoSelecao: React.FC = () => {
                 onClick={() => setTipoInspecao(tipo)}
                 className={`py-3 px-1 rounded-xl text-xs font-bold text-center border transition-all duration-200 ${
                   tipoInspecao === tipo
-                    ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/10'
+                    ? 'bg-[#0b132b] border-[#0b132b] text-white shadow-md shadow-blue-900/10'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
@@ -204,7 +204,7 @@ export const EquipamentoSelecao: React.FC = () => {
                     onClick={() => setClassificacao(classVal)}
                     className={`py-2 px-1 rounded-lg text-xs font-bold text-center border transition-all duration-200 ${
                       classificacao === classVal
-                        ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                        ? 'bg-[#0b132b] border-[#0b132b] text-white shadow-sm'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
@@ -218,7 +218,7 @@ export const EquipamentoSelecao: React.FC = () => {
         </Card>
 
         {/* Submit */}
-        <Button type="submit" fullWidth size="xl" className="flex items-center justify-center space-x-2 bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-500/10 py-3 rounded-xl font-bold">
+        <Button type="submit" fullWidth size="xl" className="flex items-center justify-center space-x-2 bg-[#0b132b] text-white hover:bg-[#1b2a47] shadow-md shadow-blue-900/10 py-3 rounded-xl font-bold">
           <span>Iniciar Preenchimento</span>
           <ArrowRight className="h-5 w-5" />
         </Button>

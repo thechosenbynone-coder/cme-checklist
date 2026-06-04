@@ -43,7 +43,7 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="h-full bg-[#111214] text-slate-400 flex flex-col justify-between overflow-hidden w-[76px] py-6 rounded-[2.5rem] shadow-[0_12px_40px_rgba(0,0,0,0.15)] border border-slate-800/20">
+    <aside className="h-full bg-[#0b132b] text-slate-400 flex flex-col justify-between overflow-hidden w-[76px] py-6 rounded-[2.5rem] shadow-[0_12px_40px_rgba(0,0,0,0.15)] border border-slate-900/40">
       <div className="flex flex-col items-center flex-1">
         {/* Top + Button (New Checklist) */}
         <div className="pb-8">
@@ -70,9 +70,9 @@ export const Sidebar: React.FC = () => {
                 className={cn(
                   "h-11 w-11 rounded-2xl grid place-items-center transition-all duration-200 outline-none relative group",
                   active 
-                    ? "bg-[#25282a] text-[#e2f952] shadow-sm" 
+                    ? "bg-[#1c2541] text-[#38bdf8] shadow-sm" 
                     : item.enabled 
-                      ? "hover:bg-[#1b1c1e] text-slate-500 hover:text-white" 
+                      ? "hover:bg-[#161e38] text-slate-500 hover:text-white" 
                       : "text-slate-650 opacity-30 cursor-not-allowed"
                 )}
                 title={item.label}
@@ -81,7 +81,7 @@ export const Sidebar: React.FC = () => {
                 
                 {/* Active indicator bar */}
                 {active && (
-                  <span className="absolute left-0 w-1 h-5 bg-[#e2f952] rounded-r-full" />
+                  <span className="absolute left-0 w-1 h-5 bg-[#38bdf8] rounded-r-full" />
                 )}
               </button>
             );
@@ -111,11 +111,11 @@ export const Sidebar: React.FC = () => {
 
         {/* Profile Circle */}
         <div className="relative group cursor-pointer mt-1">
-          <div className="h-10 w-10 rounded-full bg-slate-850 hover:ring-2 hover:ring-[#e2f952] transition overflow-hidden border border-slate-700/60 grid place-items-center font-extrabold text-white text-xs select-none">
+          <div className="h-10 w-10 rounded-full bg-slate-800 hover:ring-2 hover:ring-[#38bdf8] transition overflow-hidden border border-slate-700/60 grid place-items-center font-extrabold text-white text-xs select-none">
             {currentUser?.nome ? currentUser.nome.charAt(0).toUpperCase() : 'U'}
           </div>
           {/* Status Dot */}
-          <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-[#111214]" />
+          <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-[#0b132b]" />
         </div>
       </div>
     </aside>

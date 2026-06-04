@@ -480,7 +480,7 @@ export const ChecklistPreenchimento: React.FC = () => {
         <div className="space-y-5 animate-fadeIn w-full">
           {/* Section Indicator */}
           <div className="flex justify-center">
-            <span className="bg-blue-600 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-wider shadow-sm text-center">
+            <span className="bg-[#0b132b] text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-wider shadow-sm text-center">
               {item.secao}
             </span>
           </div>
@@ -591,7 +591,7 @@ export const ChecklistPreenchimento: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => toggleResp(item.id)}
-                  className="w-full text-center text-xs font-semibold text-blue-600 hover:text-blue-750 py-2 border border-dashed border-blue-200 rounded-lg bg-blue-50/10 transition"
+                  className="w-full text-center text-xs font-semibold text-[#0b132b] hover:text-[#1b2a47] py-2 border border-dashed border-slate-300 rounded-lg bg-slate-50 transition"
                 >
                   + Adicionar Responsável (Executante)
                 </button>
@@ -674,7 +674,7 @@ export const ChecklistPreenchimento: React.FC = () => {
                   type="button"
                   variant="secondary"
                   onClick={handleAddMaterial}
-                  className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs bg-white text-blue-600 border border-blue-200 hover:bg-blue-50"
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs bg-white text-[#0b132b] border border-slate-200 hover:bg-slate-50"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Adicionar Material</span>
@@ -803,8 +803,8 @@ export const ChecklistPreenchimento: React.FC = () => {
                           </div>
                         ) : (
                           <label className="flex flex-col items-center justify-center cursor-pointer gap-2 py-3 w-full">
-                            <Camera className="h-6 w-6 text-blue-600" />
-                            <span className="text-[10px] font-bold text-blue-600 uppercase">Tirar Foto do Reparo (Obrigatório)</span>
+                            <Camera className="h-6 w-6 text-[#0b132b]" />
+                            <span className="text-[10px] font-bold text-[#0b132b] uppercase">Tirar Foto do Reparo (Obrigatório)</span>
                             <input
                               type="file"
                               accept="image/*"
@@ -841,7 +841,7 @@ export const ChecklistPreenchimento: React.FC = () => {
       return (
         <div className="space-y-5 animate-fadeIn w-full">
           <div className="text-center">
-            <span className="bg-blue-600 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-wider shadow-sm">
+            <span className="bg-[#0b132b] text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-wider shadow-sm">
               Evidências Gerais
             </span>
             <h2 className="text-sm font-bold text-slate-800 mt-3">Fotos do Equipamento</h2>
@@ -960,8 +960,8 @@ export const ChecklistPreenchimento: React.FC = () => {
             </div>
           </Card>
 
-          <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex gap-3 text-xs text-blue-800 leading-normal">
-            <ShieldCheck className="h-5 w-5 text-blue-600 flex-shrink-0" />
+          <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 flex gap-3 text-xs text-slate-800 leading-normal">
+            <ShieldCheck className="h-5 w-5 text-[#0b132b] flex-shrink-0" />
             <p>
               Ao finalizar, esta inspeção será salva com o status **Concluída** e enviada ao Portal para validação.
             </p>
@@ -997,7 +997,7 @@ export const ChecklistPreenchimento: React.FC = () => {
           </div>
           <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
             <div 
-              className="bg-blue-600 h-2 transition-all duration-300"
+              className="bg-[#0b132b] h-2 transition-all duration-300"
               style={{ width: `${progressPercentage}%` }}
             />
           </div>
@@ -1029,7 +1029,7 @@ export const ChecklistPreenchimento: React.FC = () => {
             <Button
               type="button"
               onClick={handleSaveChecklist}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs bg-blue-600 text-white hover:bg-blue-700 font-bold"
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs bg-[#0b132b] text-white hover:bg-[#1b2a47] font-bold"
             >
               <Save className="h-4 w-4" />
               <span>Finalizar</span>
@@ -1038,7 +1038,7 @@ export const ChecklistPreenchimento: React.FC = () => {
             <Button
               type="button"
               onClick={goToNextStep}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs bg-blue-600 text-white hover:bg-blue-700"
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs bg-[#0b132b] text-white hover:bg-[#1b2a47]"
             >
               <span>Avançar</span>
               <ChevronRight className="h-4 w-4" />

@@ -126,7 +126,7 @@ export const Dashboard: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 leading-tight">
-            Gestão da Frota <span className="inline-flex items-center justify-center h-6 px-2.5 rounded-full bg-[#e2f952] text-slate-950 text-[10px] font-extrabold uppercase align-middle ml-1 tracking-wider shadow-sm">CME</span><br />
+            Gestão da Frota <span className="inline-flex items-center justify-center h-6 px-2.5 rounded-full bg-[#38bdf8] text-[#0b132b] text-[10px] font-extrabold uppercase align-middle ml-1 tracking-wider shadow-sm">CME</span><br />
             e Checklists Operacionais
           </h1>
         </div>
@@ -142,9 +142,9 @@ export const Dashboard: React.FC = () => {
           
           <button
             onClick={handleNewChecklist}
-            className="px-4.5 py-2.5 text-xs font-extrabold bg-[#111214] text-white hover:bg-slate-850 rounded-xl transition active:scale-97 flex items-center gap-2 shadow-md shadow-slate-900/10"
+            className="px-4.5 py-2.5 text-xs font-extrabold bg-[#0b132b] text-white hover:bg-[#1b2a47] rounded-xl transition active:scale-97 flex items-center gap-2 shadow-md shadow-slate-900/10"
           >
-            <PlusCircle className="h-4 w-4 text-[#e2f952]" />
+            <PlusCircle className="h-4 w-4 text-[#38bdf8]" />
             <span>Novo Checklist</span>
           </button>
         </div>
@@ -158,7 +158,7 @@ export const Dashboard: React.FC = () => {
             onClick={() => setActiveSection(sec)}
             className={`px-4 py-2 rounded-full text-xs font-bold transition-all duration-200 ${
               activeSection === sec
-                ? 'bg-[#111214] text-white shadow-sm'
+                ? 'bg-[#0b132b] text-white shadow-sm'
                 : 'bg-white text-slate-500 hover:text-slate-900 border border-slate-200/60'
             }`}
           >
@@ -208,18 +208,18 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Card 2: Active Pendencies (Lime Green) */}
-            <div className="bg-[#e2f952] border border-lime-400/40 rounded-3xl p-6 shadow-sm flex flex-col justify-between min-h-[190px] hover:shadow-md transition duration-200">
+            {/* Card 2: Active Pendencies (Soft Sky Blue) */}
+            <div className="bg-[#e0f2fe] border border-blue-200/50 rounded-3xl p-6 shadow-sm flex flex-col justify-between min-h-[190px] hover:shadow-md transition duration-200">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-extrabold text-slate-800/60 uppercase tracking-widest">Pendências Ativas</span>
-                <button className="text-slate-800/50 hover:text-slate-900 text-xs font-extrabold">...</button>
+                <span className="text-[10px] font-extrabold text-blue-900/60 uppercase tracking-widest">Pendências Ativas</span>
+                <button className="text-blue-950/50 hover:text-blue-900 text-xs font-extrabold">...</button>
               </div>
               <div className="my-3">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold text-slate-950">{eqComPendenciasCount}</span>
-                  <span className="text-slate-700/60 text-xs font-semibold">/ {equipamentos.length} Equipamentos</span>
+                  <span className="text-4xl font-extrabold text-blue-955">{eqComPendenciasCount}</span>
+                  <span className="text-blue-900/60 text-xs font-semibold">/ {equipamentos.length} Equipamentos</span>
                 </div>
-                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-950 text-[10px] font-bold text-[#e2f952] mt-2">
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#0b132b] text-[10px] font-bold text-[#38bdf8] mt-2">
                   <span>Auditoria Preventiva Ativa</span>
                 </div>
               </div>
@@ -228,10 +228,10 @@ export const Dashboard: React.FC = () => {
                 {[0.3, 0.4, 0.2, 0.5, 0.3, 0.1, 0.2].map((val, idx) => (
                   <div
                     key={idx}
-                    className="flex-1 bg-[#111214]/10 rounded-full overflow-hidden h-full flex flex-col justify-end"
+                    className="flex-1 bg-[#0b132b]/10 rounded-full overflow-hidden h-full flex flex-col justify-end"
                   >
                     <div 
-                      className="bg-[#111214] rounded-full transition-all duration-300"
+                      className="bg-[#0b132b] rounded-full transition-all duration-300"
                       style={{ height: `${val * 100}%` }}
                     />
                   </div>
@@ -239,10 +239,10 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Card 3: Promotion CTA card (Dark Slate) */}
-            <div className="bg-[#111214] text-white rounded-3xl p-6 shadow-sm flex flex-col justify-between min-h-[190px] relative overflow-hidden group hover:shadow-md transition duration-200">
+            {/* Card 3: Promotion CTA card (Dark Navy) */}
+            <div className="bg-[#0b132b] text-white rounded-3xl p-6 shadow-sm flex flex-col justify-between min-h-[190px] relative overflow-hidden group hover:shadow-md transition duration-200">
               {/* Background gradient design */}
-              <div className="absolute -right-12 -bottom-12 w-32 h-32 rounded-full bg-gradient-to-br from-[#e2f952]/20 to-indigo-500/10 blur-xl group-hover:scale-125 transition duration-500" />
+              <div className="absolute -right-12 -bottom-12 w-32 h-32 rounded-full bg-gradient-to-br from-[#38bdf8]/20 to-blue-500/10 blur-xl group-hover:scale-125 transition duration-500" />
               
               <div>
                 <h3 className="text-sm font-extrabold text-white leading-snug">
@@ -264,7 +264,6 @@ export const Dashboard: React.FC = () => {
                 </button>
               </div>
             </div>
-
           </div>
 
           {/* Statistics Bar Chart Section */}
@@ -275,12 +274,12 @@ export const Dashboard: React.FC = () => {
                 <p className="text-[10px] text-slate-400 mt-0.5">Visão consolidada da atividade nos últimos 7 dias</p>
               </div>
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-650">
-                  <span className="h-2.5 w-2.5 rounded-full bg-slate-950" />
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-655">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#0b132b]" />
                   <span>Inspeções</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-650">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#e2f952]" />
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-655">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#38bdf8]" />
                   <span>Pendências</span>
                 </div>
                 <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 text-slate-600 text-[10px] font-bold py-1 px-2.5 rounded-lg cursor-pointer">
@@ -310,14 +309,14 @@ export const Dashboard: React.FC = () => {
                       
                       {/* Active highlighted tag */}
                       {data.active && (
-                        <div className="absolute -top-6 bg-slate-950 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shadow shadow-slate-900/10">
+                        <div className="absolute -top-6 bg-[#0b132b] text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shadow shadow-slate-900/10">
                           87%
                         </div>
                       )}
                       
                       {/* Highlighted text tag */}
                       {index === 4 && (
-                        <div className="absolute top-1/2 left-full -translate-y-1/2 ml-2 bg-[#e2f952] text-slate-950 text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow z-25 whitespace-nowrap">
+                        <div className="absolute top-1/2 left-full -translate-y-1/2 ml-2 bg-[#38bdf8] text-[#0b132b] text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow z-25 whitespace-nowrap">
                           32% Ativo
                         </div>
                       )}
@@ -327,20 +326,20 @@ export const Dashboard: React.FC = () => {
                         className={`w-4 md:w-6 bg-slate-100 rounded-full transition-all duration-300 overflow-hidden relative flex flex-col justify-end border border-slate-200/20`}
                         style={{ height: `${totalHeight || 20}%` }}
                       >
-                        {/* Pendencies bar in Lime Green */}
+                        {/* Pendencies bar in Sky Blue */}
                         {data.pend > 0 && (
                           <div 
-                            className="bg-[#e2f952] w-full"
+                            className="bg-[#38bdf8] w-full"
                             style={{ height: `${pendPercent}%` }}
                           />
                         )}
-                        {/* Operations bar in Slate 950 */}
+                        {/* Operations bar in Navy Blue */}
                         <div 
-                          className="bg-slate-950 w-full relative flex items-center justify-center"
+                          className="bg-[#0b132b] w-full relative flex items-center justify-center"
                           style={{ height: `${opsPercent}%` }}
                         >
                           {/* Circle node dot indicator */}
-                          <div className="h-1.5 w-1.5 rounded-full bg-[#e2f952] absolute top-1.5 shadow-sm" />
+                          <div className="h-1.5 w-1.5 rounded-full bg-[#38bdf8] absolute top-1.5 shadow-sm" />
                         </div>
                       </div>
 
@@ -505,7 +504,7 @@ export const Dashboard: React.FC = () => {
                   onClick={() => setStatusFilter(pill.id)}
                   className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold transition-all duration-150 ${
                     statusFilter === pill.id
-                      ? 'bg-slate-950 text-white shadow-sm'
+                      ? 'bg-[#0b132b] text-white shadow-sm'
                       : 'text-slate-650 hover:bg-slate-200/50'
                   }`}
                 >
