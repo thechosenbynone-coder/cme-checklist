@@ -19,8 +19,10 @@ export const ChecklistPreenchimento: React.FC = () => {
     certificadoId?: string;
     certificadoValidade?: string;
     fotoBase64?: string;
+    fotoUrl?: string;
     pendenciaResolvida?: boolean;
     fotoResolvidaBase64?: string;
+    fotoResolvidaUrl?: string;
   }>>({});
   const [fotosEquipamento, setFotosEquipamento] = useState<(string | undefined)[]>([undefined, undefined, undefined]);
   const [materiaisDisponiveis, setMateriaisDisponiveis] = useState<Material[]>([]);
@@ -43,6 +45,74 @@ export const ChecklistPreenchimento: React.FC = () => {
   // Canvas Signature ref
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+
+  // Loading, Media Uploading and Video Recording State
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [recordingVideo, setRecordingVideo] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+
+  const handleUploadFile = async (file: File | Blob, filename: string): Promise<string> => {
+    try {
+      setUploadingFoto(true);
+      const url = await api.upload.file(file, filename);
+      return url;
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao fazer upload do arquivo para o Google Drive. Tente novamente.');
+      throw err;
+    } finally {
+      setUploadingFoto(false);
+    }
+  };
+
+  const startVideoRecording = async (onComplete: (url: string) => void) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      const chunks: Blob[] = [];
+      
+      recorder.ondataavailable = e => {
+        if (e.data && e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+      
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        try {
+          const url = await handleUploadFile(blob, `video-${Date.now()}.webm`);
+          onComplete(url);
+        } catch (e) {
+          alert('Erro ao fazer upload do vídeo.');
+        } finally {
+          setRecordingVideo(false);
+          setMediaRecorder(null);
+        }
+      };
+      
+      recorder.start();
+      setMediaRecorder(recorder);
+      setRecordingVideo(true);
+      
+      // Auto-stop after 60 seconds
+      setTimeout(() => {
+        if (recorder.state === 'recording') {
+          recorder.stop();
+        }
+      }, 60000);
+    } catch (err) {
+      console.error(err);
+      alert('Não foi possível acessar a câmera para gravar vídeo.');
+    }
+  };
+
+  const stopVideoRecording = () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+    }
+  };
+
 
   useEffect(() => {
     // 1. Carregar metadados da sessão
@@ -73,8 +143,10 @@ export const ChecklistPreenchimento: React.FC = () => {
                   certificadoId: '',
                   certificadoValidade: '',
                   fotoBase64: undefined,
+                  fotoUrl: undefined,
                   pendenciaResolvida: undefined,
-                  fotoResolvidaBase64: undefined
+                  fotoResolvidaBase64: undefined,
+                  fotoResolvidaUrl: undefined
                 };
               });
             setRespostas(initialRespostas);
@@ -193,27 +265,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     }));
   };
 
-  // Photo handlers
-  const handlePhotoChange = (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setRespostas(prev => ({
-          ...prev,
-          [itemId]: { ...prev[itemId], fotoBase64: reader.result as string }
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
-  const handleRemovePhoto = (itemId: string) => {
-    setRespostas(prev => ({
-      ...prev,
-      [itemId]: { ...prev[itemId], fotoBase64: undefined }
-    }));
-  };
 
   // Add Material to usage list
   const handleAddMaterial = () => {
@@ -252,15 +304,30 @@ export const ChecklistPreenchimento: React.FC = () => {
   const handleSaveChecklist = async () => {
     if (!equipamento || !modelo) return;
 
-    // Obter assinatura em Base64
-    let assinaturaBase64 = '';
+    // Obter assinatura e fazer upload
+    let assinaturaUrl: string | undefined;
     const canvas = canvasRef.current;
     if (canvas) {
       const blank = document.createElement('canvas');
       blank.width = canvas.width;
       blank.height = canvas.height;
       if (canvas.toDataURL() !== blank.toDataURL()) {
-        assinaturaBase64 = canvas.toDataURL();
+        try {
+          setUploadingFoto(true);
+          const blob = await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob((b) => {
+              if (b) resolve(b);
+              else reject(new Error('Canvas toBlob failed'));
+            }, 'image/png');
+          });
+          assinaturaUrl = await handleUploadFile(blob, `assinatura-${Date.now()}.png`);
+        } catch (e) {
+          console.error('Failed to upload signature:', e);
+          alert('Erro ao fazer upload da assinatura para o Google Drive.');
+          return;
+        } finally {
+          setUploadingFoto(false);
+        }
       }
     }
 
@@ -271,14 +338,14 @@ export const ChecklistPreenchimento: React.FC = () => {
       id: `resp-${itemId}-${Date.now()}`,
       inspecaoId,
       itemId,
-      status: value.status,
+      status: value.status!,
       observacao: value.observacao || undefined,
       responsavel: value.responsavel || undefined,
       certificadoId: value.certificadoId || undefined,
       certificadoValidade: value.certificadoValidade || undefined,
-      fotoBase64: value.fotoBase64 || undefined,
+      fotoUrl: value.fotoUrl || undefined,
       pendenciaResolvida: value.pendenciaResolvida !== undefined ? value.pendenciaResolvida : undefined,
-      fotoResolvidaBase64: value.fotoResolvidaBase64 || undefined,
+      fotoResolvidaUrl: value.fotoResolvidaUrl || undefined,
     }));
 
     // Mapear materiais
@@ -299,7 +366,7 @@ export const ChecklistPreenchimento: React.FC = () => {
       localizacao: metadata.localizacao,
       status: 'CONCLUIDA',
       observacoesGerais: observacoesGerais || undefined,
-      assinaturaBase64: assinaturaBase64 || undefined,
+      assinaturaUrl: assinaturaUrl || undefined,
       respostas: finalRespostas,
       materiais: finalMateriais,
       origem: metadata.origem,
@@ -421,8 +488,8 @@ export const ChecklistPreenchimento: React.FC = () => {
           alert(`Por favor, indique se a pendência do item "${item.descricao}" foi resolvida.`);
           return;
         }
-        if (resp.pendenciaResolvida && !resp.fotoResolvidaBase64) {
-          alert(`Por favor, anexe a foto de evidência para a pendência resolvida do item "${item.descricao}".`);
+        if (resp.pendenciaResolvida && !resp.fotoResolvidaUrl) {
+          alert(`Por favor, anexe a foto ou vídeo de evidência para a pendência resolvida do item "${item.descricao}".`);
           return;
         }
       }
@@ -771,19 +838,27 @@ export const ChecklistPreenchimento: React.FC = () => {
                     {/* Camera upload if resolved is YES */}
                     {resp.pendenciaResolvida === true && (
                       <div className="flex flex-col items-center justify-center p-3 bg-slate-50 border border-dashed border-slate-250 rounded-xl">
-                        {resp.fotoResolvidaBase64 ? (
+                        {resp.fotoResolvidaUrl ? (
                           <div className="relative inline-block">
-                            <img
-                              src={resp.fotoResolvidaBase64}
-                              alt="Reparo resolvido"
-                              className="h-24 w-40 object-cover rounded-lg border border-slate-300 shadow-sm"
-                            />
+                            {resp.fotoResolvidaUrl.includes('video-') || resp.fotoResolvidaUrl.endsWith('.webm') || resp.fotoResolvidaUrl.startsWith('data:video/') ? (
+                              <video
+                                src={resp.fotoResolvidaUrl}
+                                controls
+                                className="h-24 w-40 object-cover rounded-lg border border-slate-300 shadow-sm"
+                              />
+                            ) : (
+                              <img
+                                src={resp.fotoResolvidaUrl}
+                                alt="Reparo resolvido"
+                                className="h-24 w-40 object-cover rounded-lg border border-slate-300 shadow-sm"
+                              />
+                            )}
                             <button
                               type="button"
                               onClick={() => {
                                 setRespostas(prev => ({
                                   ...prev,
-                                  [item.id]: { ...prev[item.id], fotoResolvidaBase64: undefined }
+                                  [item.id]: { ...prev[item.id], fotoResolvidaUrl: undefined }
                                 }));
                               }}
                               className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700"
@@ -791,29 +866,50 @@ export const ChecklistPreenchimento: React.FC = () => {
                               <Trash size={12} />
                             </button>
                           </div>
+                        ) : recordingVideo ? (
+                          <div className="flex flex-col items-center justify-center p-3 w-full">
+                            <div className="h-3.5 w-3.5 rounded-full bg-red-650 animate-pulse mb-2" />
+                            <span className="text-[10px] font-bold text-red-600 mb-2">Gravando Vídeo (Máx 60s)...</span>
+                            <Button type="button" onClick={stopVideoRecording} className="bg-red-600 text-white hover:bg-red-700 text-[10px] py-1 px-4">
+                              Parar Gravação
+                            </Button>
+                          </div>
                         ) : (
-                          <label className="flex flex-col items-center justify-center cursor-pointer gap-2 py-3 w-full">
-                            <Camera className="h-6 w-6 text-[#0b132b]" />
-                            <span className="text-[10px] font-bold text-[#0b132b] uppercase">Tirar Foto do Reparo (Obrigatório)</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  const reader = new FileReader();
-                                  reader.onloadend = () => {
+                          <div className="flex justify-around items-center w-full gap-4">
+                            <label className="flex flex-col items-center justify-center cursor-pointer gap-1.5 py-3 flex-1 border border-dashed border-slate-200 rounded-xl hover:bg-slate-100 bg-white">
+                              <Camera className="h-6 w-6 text-[#0b132b]" />
+                              <span className="text-[10px] font-bold text-[#0b132b] uppercase">Tirar Foto</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const url = await handleUploadFile(file, `foto-reparo-${item.id}-${Date.now()}.jpg`);
                                     setRespostas(prev => ({
                                       ...prev,
-                                      [item.id]: { ...prev[item.id], fotoResolvidaBase64: reader.result as string }
+                                      [item.id]: { ...prev[item.id], fotoResolvidaUrl: url }
                                     }));
-                                  };
-                                  reader.readAsDataURL(file);
-                                }
-                              }}
-                            />
-                          </label>
+                                  }
+                                }}
+                              />
+                            </label>
+                            
+                            <button
+                              type="button"
+                              onClick={() => startVideoRecording((url) => {
+                                setRespostas(prev => ({
+                                  ...prev,
+                                  [item.id]: { ...prev[item.id], fotoResolvidaUrl: url }
+                                }));
+                              })}
+                              className="flex flex-col items-center justify-center cursor-pointer gap-1.5 py-3 flex-1 border border-dashed border-slate-200 rounded-xl hover:bg-slate-100 bg-white"
+                            >
+                              <div className="h-6 w-6 text-red-600 rounded-full border-2 border-red-600 flex items-center justify-center font-bold text-[10px]">●</div>
+                              <span className="text-[10px] font-bold text-red-650 uppercase">Gravar Vídeo</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     )}
@@ -826,7 +922,7 @@ export const ChecklistPreenchimento: React.FC = () => {
       );
     }
 
-    // Equipment Photos step (3 mandatory photos)
+    // Equipment Photos step (3 mandatory photos/videos)
     if (step.type === 'equip_photos') {
       return (
         <div className="space-y-5 animate-fadeIn w-full">
@@ -834,24 +930,32 @@ export const ChecklistPreenchimento: React.FC = () => {
             <span className="bg-[#0b132b] text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-wider shadow-sm">
               Evidências Gerais
             </span>
-            <h2 className="text-sm font-bold text-slate-800 mt-3">Fotos do Equipamento</h2>
-            <p className="text-[11px] text-slate-400 mt-1">Anexe exatamente 3 fotos gerais para liberação do equipamento.</p>
+            <h2 className="text-sm font-bold text-slate-800 mt-3">Evidências do Equipamento</h2>
+            <p className="text-[11px] text-slate-400 mt-1">Anexe exatamente 3 mídias (fotos ou vídeos) para liberação do equipamento.</p>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
             {[0, 1, 2].map(idx => {
-              const label = idx === 0 ? 'Foto 1' : idx === 1 ? 'Foto 2' : 'Foto 3';
+              const label = idx === 0 ? 'Mídia 1' : idx === 1 ? 'Mídia 2' : 'Mídia 3';
               const foto = fotosEquipamento[idx];
               return (
                 <div key={idx} className="bg-white rounded-2xl border border-slate-200 p-3 flex flex-col items-center justify-center min-h-[140px] text-center shadow-sm space-y-2">
                   <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">{label}</span>
                   {foto ? (
                     <div className="relative w-full aspect-square flex items-center justify-center bg-slate-50 border border-slate-100 rounded-lg overflow-hidden">
-                      <img
-                        src={foto}
-                        alt={label}
-                        className="w-full h-full object-cover"
-                      />
+                      {foto.includes('video-') || foto.endsWith('.webm') || foto.startsWith('data:video/') ? (
+                        <video
+                          src={foto}
+                          controls
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <img
+                          src={foto}
+                          alt={label}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
                       <button
                         type="button"
                         onClick={() => {
@@ -866,30 +970,52 @@ export const ChecklistPreenchimento: React.FC = () => {
                         <Trash size={10} />
                       </button>
                     </div>
+                  ) : recordingVideo ? (
+                    <div className="flex flex-col items-center justify-center p-2 w-full aspect-square">
+                      <div className="h-2.5 w-2.5 rounded-full bg-red-600 animate-pulse mb-1" />
+                      <span className="text-[8px] font-bold text-red-650 mb-1">Gravando...</span>
+                      <button type="button" onClick={stopVideoRecording} className="bg-red-600 text-white text-[8px] py-0.5 px-2 rounded">
+                        Parar
+                      </button>
+                    </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center border border-dashed border-slate-200 rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition w-full aspect-square">
-                      <Camera className="h-4.5 w-4.5 text-slate-400" />
-                      <span className="text-[8px] font-bold text-slate-500 uppercase mt-1">Anexar</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
+                    <div className="flex flex-col w-full aspect-square gap-1">
+                      <label className="flex flex-col items-center justify-center border border-dashed border-slate-250 rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition flex-1">
+                        <Camera className="h-4 w-4 text-slate-500" />
+                        <span className="text-[8px] font-bold text-slate-600 uppercase mt-0.5">Foto</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const url = await handleUploadFile(file, `foto-equip-${idx}-${Date.now()}.jpg`);
                               setFotosEquipamento(prev => {
                                 const updated = [...prev];
-                                updated[idx] = reader.result as string;
+                                updated[idx] = url;
                                 return updated;
                               });
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                      />
-                    </label>
+                            }
+                          }}
+                        />
+                      </label>
+                      
+                      <button
+                        type="button"
+                        onClick={() => startVideoRecording((url) => {
+                          setFotosEquipamento(prev => {
+                            const updated = [...prev];
+                            updated[idx] = url;
+                            return updated;
+                          });
+                        })}
+                        className="flex flex-col items-center justify-center border border-dashed border-slate-250 rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition flex-1 text-red-600 bg-white"
+                      >
+                        <span className="text-[12px] font-bold">●</span>
+                        <span className="text-[8px] font-bold text-red-650 uppercase">Vídeo</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               );

@@ -92,7 +92,7 @@ export const exportSingleInspectionToExcel = (inspecao: Inspecao): void => {
       'Status': statusText,
       'Observação do Item': resp.observacao || '',
       'Pendência Resolvida?': resp.pendenciaResolvida !== undefined ? (resp.pendenciaResolvida ? 'SIM' : 'NÃO') : 'N/A',
-      'Foto Reparo Anexa?': resp.fotoResolvidaBase64 ? 'SIM' : 'NÃO',
+      'Foto Reparo Anexa?': (resp.fotoResolvidaUrl || resp.fotoResolvidaBase64) ? 'SIM' : 'NÃO',
       'Executante': resp.responsavel || ''
     };
   });

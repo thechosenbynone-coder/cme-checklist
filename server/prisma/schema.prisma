@@ -87,6 +87,12 @@ model Inspecao {
   status        StatusInspecao @default(EM_ANDAMENTO)
   observacoesGerais String?
   createdById   String?
+  assinaturaUrl   String?   // URL do Drive (substitui assinaturaBase64)
+  fotosUrls       String[]  // Array de URLs do Drive (substitui fotosEquipamento)
+  origem          String?
+  destino         String?
+  compressorUtilizado String?
+  classificacao   String?
 
   equipamento Equipamento @relation(fields: [equipamentoId], references: [id])
   createdBy   User?       @relation("InspecaoCriadaPor", fields: [createdById], references: [id])
@@ -104,6 +110,11 @@ model RespostaItem {
   observacao  String?
   responsavel String?  // Quem executou aquela tarefa específica (elétrica, pintura, etc.)
   createdById String?
+  fotoUrl         String?   // URL do Drive (substitui fotoBase64)
+  fotoResolvidaUrl String?  // URL do Drive (substitui fotoResolvidaBase64)
+  certificadoId   String?
+  certificadoValidade String?
+  pendenciaResolvida  Boolean?
 
   inspecao Inspecao     @relation(fields: [inspecaoId], references: [id], onDelete: Cascade)
   item     ItemChecklist @relation(fields: [itemId], references: [id])

@@ -55,9 +55,13 @@ export interface RespostaItem {
   responsavel?: string; // Quem executou aquela verificação
   certificadoId?: string;
   certificadoValidade?: string;
+  /** @deprecated Use fotoUrl instead */
   fotoBase64?: string; // Mantido por compatibilidade
+  fotoUrl?: string; // URL do Drive (produção)
   pendenciaResolvida?: boolean; // Se a pendência foi resolvida em campo
+  /** @deprecated Use fotoResolvidaUrl instead */
   fotoResolvidaBase64?: string; // Foto da pendência resolvida
+  fotoResolvidaUrl?: string; // URL do Drive (produção)
   createdById?: string;
   item?: ItemChecklist;
 }
@@ -93,7 +97,9 @@ export interface Inspecao {
   status: StatusInspecao;
   observacoesGerais?: string;
   createdById?: string;
+  /** @deprecated Use assinaturaUrl instead */
   assinaturaBase64?: string; // Assinatura digital do encerramento
+  assinaturaUrl?: string; // URL do Drive (produção)
   equipamento?: Equipamento;
   respostas: RespostaItem[];
   materiais: MaterialUtilizado[];
@@ -102,4 +108,5 @@ export interface Inspecao {
   compressorUtilizado?: string;
   classificacao?: string;
   fotosEquipamento?: string[]; // Três fotos obrigatórias do equipamento
+  fotosUrls?: string[]; // URLs do Drive (produção)
 }

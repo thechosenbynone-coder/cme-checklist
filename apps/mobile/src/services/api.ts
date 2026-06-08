@@ -83,6 +83,29 @@ const api = {
       if (isMockMode()) return mockDb.getUsers();
       return request<User[]>('/users');
     }
+  },
+  upload: {
+    file: async (file: File | Blob, filename: string): Promise<string> => {
+      if (isMockMode()) {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+      }
+      const formData = new FormData();
+      formData.append('file', file, filename);
+      
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+      const response = await fetch(`${baseUrl}/api/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) throw new Error('Falha no upload');
+      const data = await response.json();
+      return data.url as string;
+    }
   }
 };
 

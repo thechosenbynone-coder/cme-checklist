@@ -171,17 +171,17 @@ export const InspecaoDetalhes: React.FC = () => {
                       )}
 
                       {/* Evidência Fotográfica da Plaqueta */}
-                      {resp.fotoBase64 && (
+                      {(resp.fotoUrl || resp.fotoBase64) && (
                         <div className="mt-2.5">
                           <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Evidência Fotográfica</span>
                           <img 
-                            src={resp.fotoBase64} 
+                            src={resp.fotoUrl || resp.fotoBase64} 
                             alt="Foto da Plaqueta" 
                             className="h-16 w-28 object-cover rounded-lg border border-slate-200 shadow-sm cursor-zoom-in hover:opacity-90 transition"
                             onClick={() => {
                               const newTab = window.open();
                               if (newTab) {
-                                newTab.document.write(`<img src="${resp.fotoBase64}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                                newTab.document.write(`<img src="${resp.fotoUrl || resp.fotoBase64}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
                               }
                             }}
                           />
@@ -207,20 +207,28 @@ export const InspecaoDetalhes: React.FC = () => {
                       )}
 
                       {/* Evidência de Resolução */}
-                      {resp.status === 'PENDENTE' && resp.pendenciaResolvida && resp.fotoResolvidaBase64 && (
+                      {resp.status === 'PENDENTE' && resp.pendenciaResolvida && (resp.fotoResolvidaUrl || resp.fotoResolvidaBase64) && (
                         <div className="mt-2.5">
                           <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Evidência de Resolução (Reparo)</span>
-                          <img 
-                            src={resp.fotoResolvidaBase64} 
-                            alt="Foto da Pendência Resolvida" 
-                            className="h-16 w-28 object-cover rounded-lg border border-slate-200 shadow-sm cursor-zoom-in hover:opacity-90 transition"
-                            onClick={() => {
-                              const newTab = window.open();
-                              if (newTab) {
-                                newTab.document.write(`<img src="${resp.fotoResolvidaBase64}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
-                              }
-                            }}
-                          />
+                          {(resp.fotoResolvidaUrl || resp.fotoResolvidaBase64)?.includes('video-') || (resp.fotoResolvidaUrl || resp.fotoResolvidaBase64)?.endsWith('.webm') || (resp.fotoResolvidaUrl || resp.fotoResolvidaBase64)?.startsWith('data:video/') ? (
+                            <video
+                              src={resp.fotoResolvidaUrl || resp.fotoResolvidaBase64}
+                              controls
+                              className="h-24 w-40 object-cover rounded-lg border border-slate-300 shadow-sm"
+                            />
+                          ) : (
+                            <img 
+                              src={resp.fotoResolvidaUrl || resp.fotoResolvidaBase64} 
+                              alt="Foto da Pendência Resolvida" 
+                              className="h-16 w-28 object-cover rounded-lg border border-slate-200 shadow-sm cursor-zoom-in hover:opacity-90 transition"
+                              onClick={() => {
+                                const newTab = window.open();
+                                if (newTab) {
+                                  newTab.document.write(`<img src="${resp.fotoResolvidaUrl || resp.fotoResolvidaBase64}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                                }
+                              }}
+                            />
+                          )}
                         </div>
                       )}
                     </div>
@@ -246,24 +254,35 @@ export const InspecaoDetalhes: React.FC = () => {
         <div className="space-y-6">
           
           {/* Fotos do Equipamento */}
-          {inspecao.fotosEquipamento && inspecao.fotosEquipamento.length > 0 && (
+          {((inspecao.fotosUrls && inspecao.fotosUrls.length > 0) || (inspecao.fotosEquipamento && inspecao.fotosEquipamento.length > 0)) && (
             <Card title="Fotos do Equipamento">
               <div className="grid grid-cols-3 gap-2">
-                {inspecao.fotosEquipamento.map((foto, idx) => (
-                  <div key={idx} className="aspect-square rounded-lg border border-slate-200 overflow-hidden bg-slate-50 relative group">
-                    <img 
-                      src={foto} 
-                      alt={`Foto do Equipamento ${idx + 1}`} 
-                      className="w-full h-full object-cover cursor-zoom-in hover:opacity-90 transition"
-                      onClick={() => {
-                        const newTab = window.open();
-                        if (newTab) {
-                          newTab.document.write(`<img src="${foto}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
-                        }
-                      }}
-                    />
-                  </div>
-                ))}
+                {(inspecao.fotosUrls || inspecao.fotosEquipamento || []).map((foto, idx) => {
+                  const isVideo = foto.includes('video-') || foto.endsWith('.webm') || foto.startsWith('data:video/');
+                  return (
+                    <div key={idx} className="aspect-square rounded-lg border border-slate-200 overflow-hidden bg-slate-50 relative group">
+                      {isVideo ? (
+                        <video
+                          src={foto}
+                          controls
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <img 
+                          src={foto} 
+                          alt={`Foto do Equipamento ${idx + 1}`} 
+                          className="w-full h-full object-cover cursor-zoom-in hover:opacity-90 transition"
+                          onClick={() => {
+                            const newTab = window.open();
+                            if (newTab) {
+                              newTab.document.write(`<img src="${foto}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                            }
+                          }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </Card>
           )}
@@ -292,23 +311,23 @@ export const InspecaoDetalhes: React.FC = () => {
 
           {/* Observations Card */}
           <Card title="Observações Gerais">
-            <p className="text-xs text-slate-650 leading-relaxed bg-slate-50 border border-slate-100 p-3 rounded-lg">
+            <p className="text-xs text-slate-650 leading-relaxed bg-slate-55 border border-slate-100 p-3 rounded-lg">
               {inspecao.observacoesGerais || 'Sem observações adicionais.'}
             </p>
           </Card>
 
           {/* Inspector Signature Box */}
           <Card title="Assinatura Digital Encerramento">
-            {inspecao.assinaturaBase64 ? (
+            {(inspecao.assinaturaUrl || inspecao.assinaturaBase64) ? (
               <div className="border border-slate-200 rounded-lg p-2 bg-slate-50 flex items-center justify-center h-24">
                 <img 
-                  src={inspecao.assinaturaBase64} 
+                  src={inspecao.assinaturaUrl || inspecao.assinaturaBase64} 
                   alt="Assinatura do Inspetor" 
                   className="max-h-full max-w-full object-contain"
                 />
               </div>
             ) : (
-              <div className="border border-dashed border-slate-200 rounded-lg p-4 bg-slate-55 flex items-center justify-center h-24 text-xs text-slate-400">
+              <div className="border border-dashed border-slate-200 rounded-lg p-4 bg-slate-50 flex items-center justify-center h-24 text-xs text-slate-400">
                 Assinatura não cadastrada.
               </div>
             )}

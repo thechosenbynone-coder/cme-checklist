@@ -7,5 +7,11 @@ export default defineConfig({
   server: {
     port: 5174, // Porta diferente para o web admin
     host: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3333',
+        changeOrigin: true,
+      }
+    }
   },
 });

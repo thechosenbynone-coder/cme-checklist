@@ -7,5 +7,11 @@ export default defineConfig({
   server: {
     port: 5173, // Porta padrão para o app de campo
     host: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3333',
+        changeOrigin: true,
+      }
+    }
   },
 });

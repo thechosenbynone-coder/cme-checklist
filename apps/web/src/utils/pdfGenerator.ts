@@ -7,7 +7,27 @@ interface jsPDFWithAutoTable extends jsPDF {
   autoTable: (options: any) => jsPDF;
 }
 
-export const generateInspectionPDF = (inspecao: Inspecao): void => {
+const getBase64Image = async (imgUrl: string): Promise<string> => {
+  if (!imgUrl) return '';
+  if (imgUrl.startsWith('data:')) {
+    return imgUrl;
+  }
+  try {
+    const response = await fetch(imgUrl);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('Failed to convert image URL to base64:', imgUrl, error);
+    return imgUrl; // Fallback
+  }
+};
+
+export const generateInspectionPDF = async (inspecao: Inspecao): Promise<void> => {
   const doc = new jsPDF() as jsPDFWithAutoTable;
   
   // Cores institucionais
@@ -212,17 +232,21 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
   doc.text('Continental Oil & Gas Services', 114, currentY + 34);
 
   // Inserir imagem de assinatura se houver
-  if (inspecao.assinaturaBase64) {
+  const assinatura = inspecao.assinaturaUrl || inspecao.assinaturaBase64;
+  if (assinatura) {
     try {
-      doc.addImage(inspecao.assinaturaBase64, 'PNG', 20, currentY + 2, 60, 20);
+      const signatureBase64 = await getBase64Image(assinatura);
+      if (signatureBase64.startsWith('data:')) {
+        doc.addImage(signatureBase64, 'PNG', 20, currentY + 2, 60, 20);
+      }
     } catch (e) {
       console.error('Erro ao renderizar imagem da assinatura no PDF', e);
     }
   }
 
   // 7. Anexo Fotográfico: Fotos do Equipamento e Resoluções de Pendências
-  const fotosEquipamento = inspecao.fotosEquipamento || [];
-  const fotosResolvidas = inspecao.respostas.filter(r => r.status === 'PENDENTE' && r.pendenciaResolvida && r.fotoResolvidaBase64);
+  const fotosEquipamento = inspecao.fotosUrls || inspecao.fotosEquipamento || [];
+  const fotosResolvidas = inspecao.respostas.filter(r => r.status === 'PENDENTE' && r.pendenciaResolvida && (r.fotoResolvidaUrl || r.fotoResolvidaBase64));
   
   if (fotosEquipamento.length > 0 || fotosResolvidas.length > 0) {
     doc.addPage();
@@ -238,13 +262,24 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
       doc.text('Fotos Gerais do Equipamento:', 10, photoY);
       photoY += 8;
       
-      fotosEquipamento.forEach((foto, idx) => {
+      for (let idx = 0; idx < fotosEquipamento.length; idx++) {
+        const foto = fotosEquipamento[idx];
         try {
-          doc.addImage(foto, 'PNG', 10 + idx * 63, photoY, 58, 40);
+          const isVideo = foto.includes('video-') || foto.endsWith('.webm') || foto.startsWith('data:video/');
+          if (isVideo) {
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(8);
+            doc.text(`[Vídeo: ${foto.substring(0, 30)}...]`, 10 + idx * 63, photoY + 20);
+          } else {
+            const imgBase64 = await getBase64Image(foto);
+            if (imgBase64.startsWith('data:')) {
+              doc.addImage(imgBase64, 'PNG', 10 + idx * 63, photoY, 58, 40);
+            }
+          }
         } catch (err) {
           console.error('Erro ao renderizar foto do equipamento no PDF', err);
         }
-      });
+      }
       photoY += 48;
     }
     
@@ -260,7 +295,8 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
       doc.text('Resolução de Pendências (Evidências de Reparo):', 10, photoY);
       photoY += 8;
       
-      fotosResolvidas.forEach((resp, idx) => {
+      for (let idx = 0; idx < fotosResolvidas.length; idx++) {
+        const resp = fotosResolvidas[idx];
         if (photoY > 200) {
           doc.addPage();
           photoY = 20;
@@ -273,16 +309,28 @@ export const generateInspectionPDF = (inspecao: Inspecao): void => {
         doc.text(`Observação original: ${resp.observacao || ''}`, 10, photoY + 4);
         photoY += 8;
         
-        if (resp.fotoResolvidaBase64) {
+        const fotoRes = resp.fotoResolvidaUrl || resp.fotoResolvidaBase64;
+        if (fotoRes) {
           try {
-            doc.addImage(resp.fotoResolvidaBase64, 'PNG', 10, photoY, 60, 40);
-            photoY += 46;
+            const isVideo = fotoRes.includes('video-') || fotoRes.endsWith('.webm') || fotoRes.startsWith('data:video/');
+            if (isVideo) {
+              doc.setFont('helvetica', 'italic');
+              doc.setFontSize(8);
+              doc.text(`[Vídeo registrado em campo: ${fotoRes}]`, 10, photoY + 10);
+              photoY += 20;
+            } else {
+              const imgBase64 = await getBase64Image(fotoRes);
+              if (imgBase64.startsWith('data:')) {
+                doc.addImage(imgBase64, 'PNG', 10, photoY, 60, 40);
+                photoY += 46;
+              }
+            }
           } catch (err) {
             console.error('Erro ao renderizar foto da resolução no PDF', err);
             photoY += 5;
           }
         }
-      });
+      }
     }
   }
 
