@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -10,27 +11,22 @@ async function main() {
   await prisma.itemChecklist.deleteMany();
   await prisma.checklistModelo.deleteMany();
   await prisma.material.deleteMany();
-  await prisma.equipamento.deleteMany();
   await prisma.user.deleteMany();
+  // Equipamentos NÃO são semeados aqui: vêm da importação da planilha (Fase 1).
 
-  console.log('Seeding Users...');
-  const users = [
-    { id: 'usr-1', nome: 'João Silva', email: 'joao.silva@continental.com', funcao: 'Supervisor' },
-    { id: 'usr-2', nome: 'Pedro Souza', email: 'pedro.souza@continental.com', funcao: 'Operador' },
-  ];
-  for (const u of users) {
-    await prisma.user.create({ data: u });
-  }
-
-  console.log('Seeding Equipamentos...');
-  const equipamentos = [
-    { id: 'eq-1', codigo: 'AC-01', nome: 'After Cooler 01 (CME Type)', tipo: 'After Cooler', localizacao: 'Plataforma P-51', status: 'Ativo' },
-    { id: 'eq-2', codigo: 'AC-02', nome: 'After Cooler 02 (CME Type)', tipo: 'After Cooler', localizacao: 'Plataforma P-58', status: 'Manutenção' },
-    { id: 'eq-3', codigo: 'CP-01', nome: 'Compressor de Ar Sullair 750', tipo: 'Compressor', localizacao: 'Oficina Base Macaé', status: 'Ativo' },
-  ];
-  for (const eq of equipamentos) {
-    await prisma.equipamento.create({ data: eq });
-  }
+  console.log('Seeding Users (usuário de teste)...');
+  // Credencial de teste: Lucas Lima / 321 (Gestor). Usuários reais recebem senha própria.
+  const senhaHash = await bcrypt.hash('321', 10);
+  await prisma.user.create({
+    data: {
+      id: 'usr-lucas',
+      nome: 'Lucas Lima',
+      email: 'lucas.lima@cme.local',
+      funcao: 'GESTOR',
+      senhaHash,
+      ativo: true,
+    },
+  });
 
   console.log('Seeding ChecklistModelo...');
   const checklistModelo = await prisma.checklistModelo.create({

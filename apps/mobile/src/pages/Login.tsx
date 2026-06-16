@@ -30,29 +30,29 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-md p-8">
-        <div>
-          {/* Logo */}
-          <div className="mx-auto h-12 w-12 rounded-xl bg-blue-600 text-white grid place-items-center">
+    <div className="min-h-[100dvh] bg-slate-50 flex items-center justify-center px-4">
+      <div className="max-w-sm w-full bg-white rounded-2xl shadow-md p-7">
+        <div className="text-center">
+          <div className="mx-auto h-12 w-12 rounded-xl bg-[#0b132b] text-[#38bdf8] grid place-items-center mb-3 shadow-md shadow-blue-900/10">
             <ShieldCheck className="h-7 w-7" />
           </div>
-          <h2 className="mt-6 text-center text-2xl font-semibold text-slate-900">Continental</h2>
-          <p className="mt-1 text-center text-sm text-slate-500">CME Checklist Portal</p>
+          <h2 className="text-lg font-bold text-slate-900 uppercase tracking-tight">CME Checklist</h2>
+          <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-wider">
+            App de Campo
+          </p>
         </div>
 
-        <form className="mt-8 space-y-5" onSubmit={handleLogin}>
+        <form className="mt-7 space-y-4" onSubmit={handleLogin}>
           <div>
-            <label htmlFor="identifier" className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label htmlFor="identifier" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
               Usuário ou E-mail
             </label>
             <input
               id="identifier"
-              name="identifier"
               type="text"
               autoComplete="username"
               required
-              className="block w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60 focus:border-blue-500 transition"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
               placeholder="Ex: Lucas Lima"
               value={identifier}
               onChange={(e) => {
@@ -61,18 +61,16 @@ export const Login: React.FC = () => {
               }}
             />
           </div>
-
           <div>
-            <label htmlFor="senha" className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label htmlFor="senha" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
               Senha
             </label>
             <input
               id="senha"
-              name="senha"
               type="password"
               autoComplete="current-password"
               required
-              className="block w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60 focus:border-blue-500 transition"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
               placeholder="Sua senha"
               value={senha}
               onChange={(e) => {
@@ -84,14 +82,20 @@ export const Login: React.FC = () => {
 
           {error && <p className="text-red-600 text-xs text-center">{error}</p>}
 
-          <Button type="submit" fullWidth size="lg" disabled={loading}>
+          <Button
+            type="submit"
+            fullWidth
+            size="lg"
+            disabled={loading}
+            className="bg-[#0b132b] text-white hover:bg-[#1b2a47] font-bold"
+          >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Entrando...
               </span>
             ) : (
-              'Entrar no Portal'
+              'Entrar'
             )}
           </Button>
         </form>

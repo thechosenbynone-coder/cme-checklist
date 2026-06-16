@@ -174,14 +174,14 @@ export const InspecaoDetalhes: React.FC = () => {
                       {(resp.fotoUrl || resp.fotoBase64) && (
                         <div className="mt-2.5">
                           <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Evidência Fotográfica</span>
-                          <img 
-                            src={resp.fotoUrl || resp.fotoBase64} 
-                            alt="Foto da Plaqueta" 
+                          <img
+                            src={api.mediaUrl(resp.fotoUrl || resp.fotoBase64)}
+                            alt="Foto da Plaqueta"
                             className="h-16 w-28 object-cover rounded-lg border border-slate-200 shadow-sm cursor-zoom-in hover:opacity-90 transition"
                             onClick={() => {
                               const newTab = window.open();
                               if (newTab) {
-                                newTab.document.write(`<img src="${resp.fotoUrl || resp.fotoBase64}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                                newTab.document.write(`<img src="${api.mediaUrl(resp.fotoUrl || resp.fotoBase64)}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
                               }
                             }}
                           />
@@ -212,19 +212,19 @@ export const InspecaoDetalhes: React.FC = () => {
                           <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Evidência de Resolução (Reparo)</span>
                           {(resp.fotoResolvidaUrl || resp.fotoResolvidaBase64)?.includes('video-') || (resp.fotoResolvidaUrl || resp.fotoResolvidaBase64)?.endsWith('.webm') || (resp.fotoResolvidaUrl || resp.fotoResolvidaBase64)?.startsWith('data:video/') ? (
                             <video
-                              src={resp.fotoResolvidaUrl || resp.fotoResolvidaBase64}
+                              src={api.mediaUrl(resp.fotoResolvidaUrl || resp.fotoResolvidaBase64)}
                               controls
                               className="h-24 w-40 object-cover rounded-lg border border-slate-300 shadow-sm"
                             />
                           ) : (
-                            <img 
-                              src={resp.fotoResolvidaUrl || resp.fotoResolvidaBase64} 
-                              alt="Foto da Pendência Resolvida" 
+                            <img
+                              src={api.mediaUrl(resp.fotoResolvidaUrl || resp.fotoResolvidaBase64)}
+                              alt="Foto da Pendência Resolvida"
                               className="h-16 w-28 object-cover rounded-lg border border-slate-200 shadow-sm cursor-zoom-in hover:opacity-90 transition"
                               onClick={() => {
                                 const newTab = window.open();
                                 if (newTab) {
-                                  newTab.document.write(`<img src="${resp.fotoResolvidaUrl || resp.fotoResolvidaBase64}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                                  newTab.document.write(`<img src="${api.mediaUrl(resp.fotoResolvidaUrl || resp.fotoResolvidaBase64)}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
                                 }
                               }}
                             />
@@ -263,19 +263,19 @@ export const InspecaoDetalhes: React.FC = () => {
                     <div key={idx} className="aspect-square rounded-lg border border-slate-200 overflow-hidden bg-slate-50 relative group">
                       {isVideo ? (
                         <video
-                          src={foto}
+                          src={api.mediaUrl(foto)}
                           controls
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <img 
-                          src={foto} 
-                          alt={`Foto do Equipamento ${idx + 1}`} 
+                        <img
+                          src={api.mediaUrl(foto)}
+                          alt={`Foto do Equipamento ${idx + 1}`}
                           className="w-full h-full object-cover cursor-zoom-in hover:opacity-90 transition"
                           onClick={() => {
                             const newTab = window.open();
                             if (newTab) {
-                              newTab.document.write(`<img src="${foto}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                              newTab.document.write(`<img src="${api.mediaUrl(foto)}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
                             }
                           }}
                         />
@@ -320,9 +320,9 @@ export const InspecaoDetalhes: React.FC = () => {
           <Card title="Assinatura Digital Encerramento">
             {(inspecao.assinaturaUrl || inspecao.assinaturaBase64) ? (
               <div className="border border-slate-200 rounded-lg p-2 bg-slate-50 flex items-center justify-center h-24">
-                <img 
-                  src={inspecao.assinaturaUrl || inspecao.assinaturaBase64} 
-                  alt="Assinatura do Inspetor" 
+                <img
+                  src={api.mediaUrl(inspecao.assinaturaUrl || inspecao.assinaturaBase64)}
+                  alt="Assinatura do Inspetor"
                   className="max-h-full max-w-full object-contain"
                 />
               </div>

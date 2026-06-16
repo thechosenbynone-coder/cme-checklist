@@ -34,7 +34,9 @@ model User {
   id        String   @id @default(uuid())
   nome      String
   email     String   @unique
-  funcao    String?  // Operador, Supervisor, Gestor, Compras, Admin
+  funcao    String?  // Operador, Supervisor, Gestor, Admin
+  senhaHash String?  // Hash bcrypt da senha (auth real)
+  ativo     Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

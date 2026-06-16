@@ -1,12 +1,7 @@
-import * as mockDb from './mockData';
 import { Inspecao, Equipamento, Material, ChecklistModelo, User } from '@cme/types';
 
-// Detect if we are running in Mock Mode (default to true for Vercel/local testing without active API)
-const isMockMode = () => {
-  const mockEnv = import.meta.env.VITE_MOCK_MODE;
-  if (mockEnv === 'false') return false;
-  return true; // Default to true
-};
+const TOKEN_KEY = 'cme_token';
+const USER_KEY = 'cme_current_user';
 
 const getApiUrl = (path: string) => {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
@@ -14,21 +9,52 @@ const getApiUrl = (path: string) => {
   return `${baseUrl}/api${cleanPath}`;
 };
 
-// Generic HTTP request helper
+// ── Sessão (token + usuário) em localStorage ───────────────────────
+const getToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(TOKEN_KEY);
+};
+
+const setSession = (token: string, user: User): void => {
+  window.localStorage.setItem(TOKEN_KEY, token);
+  window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+};
+
+const clearSession = (): void => {
+  window.localStorage.removeItem(TOKEN_KEY);
+  window.localStorage.removeItem(USER_KEY);
+};
+
+// ── HTTP helper (injeta Authorization) ─────────────────────────────
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = getApiUrl(path);
-  const headers = {
+  const token = getToken();
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers || {}),
+    ...(options.headers as Record<string, string>),
   };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  const response = await fetch(url, { ...options, headers });
+
+  if (response.status === 401) {
+    // Sessão expirada/inválida: limpa e força novo login.
+    clearSession();
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.assign('/login');
+    }
+    throw new Error('Não autenticado.');
+  }
 
   if (!response.ok) {
-    throw new Error(`Erro na chamada da API: ${response.statusText}`);
+    let msg = response.statusText;
+    try {
+      const body = await response.json();
+      if (body?.error) msg = body.error;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg || 'Erro na chamada da API.');
   }
 
   if (response.status === 204) return null as unknown as T;
@@ -37,56 +63,84 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 const api = {
   equipamentos: {
-    list: async (): Promise<Equipamento[]> => {
-      if (isMockMode()) return mockDb.getEquipamentos();
-      return request<Equipamento[]>('/equipamentos');
-    }
+    list: (): Promise<Equipamento[]> => request<Equipamento[]>('/equipamentos'),
   },
   modelos: {
-    getPorTipo: async (tipo: string): Promise<ChecklistModelo | undefined> => {
-      if (isMockMode()) return mockDb.getChecklistModeloPorTipo(tipo);
-      return request<ChecklistModelo>(`/modelos/tipo/${encodeURIComponent(tipo)}`);
-    }
+    getPorTipo: (tipo: string): Promise<ChecklistModelo | undefined> =>
+      request<ChecklistModelo>(`/modelos/tipo/${encodeURIComponent(tipo)}`),
   },
   materiais: {
-    list: async (): Promise<Material[]> => {
-      if (isMockMode()) return mockDb.getMateriais();
-      return request<Material[]>('/materiais');
-    }
+    list: (): Promise<Material[]> => request<Material[]>('/materiais'),
   },
   inspecoes: {
-    list: async (): Promise<Inspecao[]> => {
-      if (isMockMode()) return mockDb.getInspecoes();
-      return request<Inspecao[]>('/inspecoes');
-    },
-    get: async (id: string): Promise<Inspecao | undefined> => {
-      if (isMockMode()) return mockDb.getInspecaoById(id);
-      return request<Inspecao>(`/inspecoes/${id}`);
-    },
+    list: (): Promise<Inspecao[]> => request<Inspecao[]>('/inspecoes'),
+    get: (id: string): Promise<Inspecao | undefined> => request<Inspecao>(`/inspecoes/${id}`),
     save: async (inspecao: Inspecao): Promise<void> => {
-      if (isMockMode()) {
-        mockDb.saveInspecao(inspecao);
-        return;
-      }
-      await request<void>('/inspecoes', {
-        method: 'POST',
-        body: JSON.stringify(inspecao),
-      });
-    }
+      await request<void>('/inspecoes', { method: 'POST', body: JSON.stringify(inspecao) });
+    },
   },
   auth: {
-    currentUser: (): User => {
-      // Auth runs locally in browser localStorage for simplified session
-      return mockDb.getLogisticaCurrentUser();
+    login: async (identifier: string, senha: string): Promise<User> => {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+      const response = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier, senha }),
+      });
+      if (!response.ok) {
+        let msg = 'Credenciais inválidas.';
+        try {
+          const body = await response.json();
+          if (body?.error) msg = body.error;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
+      const data = (await response.json()) as { token: string; user: User };
+      setSession(data.token, data.user);
+      return data.user;
     },
-    setCurrentUser: (user: User): void => {
-      mockDb.setLogisticaCurrentUser(user);
+    currentUser: (): User | null => {
+      if (typeof window === 'undefined') return null;
+      const raw = window.localStorage.getItem(USER_KEY);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as User;
+      } catch {
+        return null;
+      }
     },
-    listUsers: async (): Promise<User[]> => {
-      if (isMockMode()) return mockDb.getUsers();
-      return request<User[]>('/users');
+    isAuthenticated: (): boolean => !!getToken(),
+    logout: (): void => clearSession(),
+    listUsers: (): Promise<User[]> => request<User[]>('/users'),
+  },
+  upload: {
+    file: async (file: File | Blob, filename: string): Promise<string> => {
+      const formData = new FormData();
+      formData.append('file', file, filename);
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+      const token = getToken();
+      const response = await fetch(`${baseUrl}/api/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
+      if (!response.ok) throw new Error('Falha no upload');
+      const data = await response.json();
+      return data.url as string;
+    },
+  },
+  // Converte URL de mídia do Drive (proxy autenticado) anexando o token para uso em <img>/<video>.
+  mediaUrl: (url?: string): string | undefined => {
+    if (!url) return url;
+    if (url.startsWith('/api/files/')) {
+      const token = getToken();
+      const base = import.meta.env.VITE_API_BASE_URL || '';
+      return `${base}${url}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
     }
-  }
+    return url;
+  },
 };
 
 export default api;

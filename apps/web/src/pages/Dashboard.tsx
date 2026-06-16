@@ -126,7 +126,7 @@ export const Dashboard: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 leading-tight">
-            Gestão da Frota <span className="inline-flex items-center justify-center h-6 px-2.5 rounded-full bg-[#38bdf8] text-[#0b132b] text-[10px] font-extrabold uppercase align-middle ml-1 tracking-wider shadow-sm">CME</span><br />
+            Gestão de Equipamentos <span className="inline-flex items-center justify-center h-6 px-2.5 rounded-full bg-[#38bdf8] text-[#0b132b] text-[10px] font-extrabold uppercase align-middle ml-1 tracking-wider shadow-sm">CME</span><br />
             e Checklists Operacionais
           </h1>
         </div>
@@ -398,9 +398,9 @@ export const Dashboard: React.FC = () => {
               <ArrowUpRight className="h-4 w-4 text-slate-400" />
             </div>
             <div>
-              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Frota Operacional</h4>
+              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Equipamentos Operacionais</h4>
               <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                Monitore o status do compressores Sullair, vasos e After Coolers cadastrados.
+                Monitore o status dos compressores, vasos e After Coolers cadastrados.
               </p>
             </div>
           </div>
@@ -423,14 +423,14 @@ export const Dashboard: React.FC = () => {
 
       </div>
 
-      {/* Fleet Status & Recent Checklists Table Block */}
+      {/* Equipment Status & Recent Checklists Table Block */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
-        
-        {/* Fleet Status List */}
+
+        {/* Equipment Status List */}
         <div className="lg:col-span-1 space-y-4">
           <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-4">
             <div>
-              <h3 className="text-sm font-extrabold text-slate-900">Status Operacional da Frota</h3>
+              <h3 className="text-sm font-extrabold text-slate-900">Status Operacional dos Equipamentos</h3>
               <p className="text-[10px] text-slate-400 mt-0.5">Inteligência baseada no último checklist preenchido</p>
             </div>
             <div className="space-y-3">

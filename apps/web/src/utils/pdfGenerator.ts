@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Inspecao } from '@cme/types';
+import api from '../services/api';
 
 // Extend jsPDF interface to include autoTable
 interface jsPDFWithAutoTable extends jsPDF {
@@ -13,7 +14,8 @@ const getBase64Image = async (imgUrl: string): Promise<string> => {
     return imgUrl;
   }
   try {
-    const response = await fetch(imgUrl);
+    const resolvedUrl = api.mediaUrl(imgUrl) || imgUrl;
+    const response = await fetch(resolvedUrl);
     const blob = await response.blob();
     return new Promise((resolve, reject) => {
       const reader = new FileReader();

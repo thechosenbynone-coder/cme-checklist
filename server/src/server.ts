@@ -2,8 +2,18 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import multer from 'multer';
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 import { google } from 'googleapis';
 import { PrismaClient } from '@prisma/client';
+import {
+  hashSenha,
+  verificarSenha,
+  assinarToken,
+  requireAuth,
+  requireRole,
+  type Funcao,
+} from './auth.js';
 
 dotenv.config();
 const app = express();
@@ -11,8 +21,46 @@ const prisma = new PrismaClient();
 const upload = multer({ storage: multer.memoryStorage() });
 const PORT = process.env.PORT || 3333;
 
-app.use(cors());
+// ── CORS allowlist ─────────────────────────────────────────────────
+// Origens liberadas via env CORS_ORIGINS (separadas por vírgula). Default: dev local.
+// "*" libera tudo (use só em desenvolvimento).
+const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Sem origin (curl, mesma origem via proxy) é permitido.
+      if (!origin) return callback(null, true);
+      if (corsOrigins.includes('*') || corsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origem não permitida pelo CORS: ${origin}`));
+    },
+    credentials: true,
+  })
+);
+
 app.use(express.json({ limit: '1mb' })); // JSON pequeno — sem base64
+
+// ── Rate limit ─────────────────────────────────────────────────────
+// Limite agressivo no login (anti brute-force) e um limite geral mais folgado.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas de login. Tente novamente em alguns minutos.' },
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 min
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // ── Google Drive OAuth2 ────────────────────────────────────────────
 const oauth2Client = new google.auth.OAuth2(
@@ -23,15 +71,12 @@ const oauth2Client = new google.auth.OAuth2(
 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
 const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
-// ── Função de upload para o Drive ────────────────────────────────
-async function uploadToDrive(
-  buffer: Buffer,
-  filename: string,
-  mimeType: string
-): Promise<string> {
+// ── Upload para o Drive (privado — sem permissão pública) ──────────
+// Retorna o fileId; o acesso ao conteúdo passa pelo proxy autenticado /api/files/:id.
+async function uploadToDrive(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
   const { Readable } = await import('stream');
   const stream = Readable.from(buffer);
-  
+
   const res = await drive.files.create({
     requestBody: {
       name: filename,
@@ -41,35 +86,144 @@ async function uploadToDrive(
     fields: 'id',
   });
 
-  const fileId = res.data.id!;
-  
-  // Tornar público para acesso direto por URL
-  await drive.permissions.create({
-    fileId,
-    requestBody: { role: 'reader', type: 'anyone' },
-  });
-
-  return `https://drive.google.com/uc?id=${fileId}`;
+  // IMPORTANTE: não tornamos o arquivo público. O app acessa via proxy autenticado.
+  return res.data.id!;
 }
 
-// ── Rotas ─────────────────────────────────────────────────────────
+// ── Schemas de validação (zod) ─────────────────────────────────────
+const loginSchema = z.object({
+  identifier: z.string().min(1, 'Informe nome ou e-mail.'),
+  senha: z.string().min(1, 'Informe a senha.'),
+});
+
+const respostaSchema = z.object({
+  id: z.string().optional(),
+  itemId: z.string(),
+  status: z.enum(['OK', 'PENDENTE', 'NAO_APLICAVEL']),
+  observacao: z.string().nullish(),
+  responsavel: z.string().nullish(),
+  createdById: z.string().nullish(),
+  fotoUrl: z.string().nullish(),
+  fotoResolvidaUrl: z.string().nullish(),
+  certificadoId: z.string().nullish(),
+  certificadoValidade: z.string().nullish(),
+  pendenciaResolvida: z.boolean().nullish(),
+});
+
+const materialSchema = z.object({
+  id: z.string().optional(),
+  materialId: z.string(),
+  quantidade: z.number(),
+  observacao: z.string().nullish(),
+});
+
+const inspecaoSchema = z.object({
+  id: z.string().optional(),
+  equipamentoId: z.string().min(1),
+  tipo: z.enum(['PRE_EMBARQUE', 'OPERACIONAL', 'RETORNO_EMBARQUE']),
+  data: z.string().nullish(),
+  responsavelGeral: z.string().nullish(),
+  localizacao: z.string().nullish(),
+  status: z.enum(['EM_ANDAMENTO', 'CONCLUIDA', 'VALIDADA', 'CANCELADA']),
+  observacoesGerais: z.string().nullish(),
+  createdById: z.string().nullish(),
+  assinaturaUrl: z.string().nullish(),
+  fotosUrls: z.array(z.string()).nullish(),
+  fotosEquipamento: z.array(z.string()).nullish(),
+  origem: z.string().nullish(),
+  destino: z.string().nullish(),
+  compressorUtilizado: z.string().nullish(),
+  classificacao: z.string().nullish(),
+  respostas: z.array(respostaSchema).default([]),
+  materiais: z.array(materialSchema).default([]),
+});
+
+// ── Rotas públicas ─────────────────────────────────────────────────
 
 // GET /health
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'cme-checklist-api' });
 });
 
-// POST /api/upload
+// POST /auth/login
+app.post('/auth/login', loginLimiter, async (req, res) => {
+  try {
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos.' });
+    }
+    const { identifier, senha } = parsed.data;
+
+    // Login por e-mail OU nome (case-insensitive).
+    const user = await prisma.user.findFirst({
+      where: {
+        ativo: true,
+        OR: [
+          { email: { equals: identifier, mode: 'insensitive' } },
+          { nome: { equals: identifier, mode: 'insensitive' } },
+        ],
+      },
+    });
+
+    // Mensagem genérica para não revelar se o usuário existe.
+    if (!user || !user.senhaHash) {
+      return res.status(401).json({ error: 'Credenciais inválidas.' });
+    }
+    const ok = await verificarSenha(senha, user.senhaHash);
+    if (!ok) {
+      return res.status(401).json({ error: 'Credenciais inválidas.' });
+    }
+
+    const funcao = (user.funcao || 'OPERADOR').toUpperCase() as Funcao;
+    const token = assinarToken({ sub: user.id, nome: user.nome, funcao });
+
+    res.json({
+      token,
+      user: { id: user.id, nome: user.nome, email: user.email, funcao: user.funcao },
+    });
+  } catch (error: any) {
+    console.error('Error during login:', error);
+    res.status(500).json({ error: 'Erro interno no login.' });
+  }
+});
+
+// ── A partir daqui, tudo exige autenticação ────────────────────────
+app.use('/api', apiLimiter, requireAuth);
+
+// GET /api/me — dados do usuário logado
+app.get('/api/me', (req, res) => {
+  res.json(req.user);
+});
+
+// GET /api/files/:id — proxy autenticado para mídia do Drive (mantém o arquivo privado)
+app.get('/api/files/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const meta = await drive.files.get({ fileId: id, fields: 'mimeType, name' });
+    const driveRes = await drive.files.get(
+      { fileId: id, alt: 'media' },
+      { responseType: 'stream' }
+    );
+    if (meta.data.mimeType) res.setHeader('Content-Type', meta.data.mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    (driveRes.data as any).pipe(res);
+  } catch (error: any) {
+    console.error('Error proxying Drive file:', error);
+    res.status(404).json({ error: 'Arquivo não encontrado.' });
+  }
+});
+
+// POST /api/upload — retorna a URL do proxy autenticado
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
-    
+
     const timestamp = Date.now();
     const ext = req.file.originalname.split('.').pop() || 'bin';
     const filename = `cme-${timestamp}.${ext}`;
-    
-    const url = await uploadToDrive(req.file.buffer, filename, req.file.mimetype);
-    res.json({ url });
+
+    const fileId = await uploadToDrive(req.file.buffer, filename, req.file.mimetype);
+    res.json({ url: `/api/files/${fileId}` });
   } catch (error: any) {
     console.error('Error during Google Drive upload:', error);
     res.status(500).json({ error: error.message || 'Error uploading file' });
@@ -77,7 +231,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 });
 
 // GET /api/equipamentos
-app.get('/api/equipamentos', async (req, res) => {
+app.get('/api/equipamentos', async (_req, res) => {
   try {
     const data = await prisma.equipamento.findMany({ orderBy: { codigo: 'asc' } });
     res.json(data);
@@ -93,7 +247,7 @@ app.get('/api/modelos/tipo/:tipo', async (req, res) => {
     const { tipo } = req.params;
     const data = await prisma.checklistModelo.findFirst({
       where: { tipoEquipamento: tipo, ativo: true },
-      include: { itens: { orderBy: { ordem: 'asc' } } }
+      include: { itens: { orderBy: { ordem: 'asc' } } },
     });
     res.json(data);
   } catch (error: any) {
@@ -103,9 +257,12 @@ app.get('/api/modelos/tipo/:tipo', async (req, res) => {
 });
 
 // GET /api/materiais
-app.get('/api/materiais', async (req, res) => {
+app.get('/api/materiais', async (_req, res) => {
   try {
-    const data = await prisma.material.findMany({ where: { ativo: true }, orderBy: { descricao: 'asc' } });
+    const data = await prisma.material.findMany({
+      where: { ativo: true },
+      orderBy: { descricao: 'asc' },
+    });
     res.json(data);
   } catch (error: any) {
     console.error('Error fetching materiais:', error);
@@ -113,10 +270,13 @@ app.get('/api/materiais', async (req, res) => {
   }
 });
 
-// GET /api/users
-app.get('/api/users', async (req, res) => {
+// GET /api/users — só Gestor/Admin
+app.get('/api/users', requireRole('GESTOR', 'ADMIN'), async (_req, res) => {
   try {
-    const data = await prisma.user.findMany({ orderBy: { nome: 'asc' } });
+    const data = await prisma.user.findMany({
+      orderBy: { nome: 'asc' },
+      select: { id: true, nome: true, email: true, funcao: true, ativo: true, createdAt: true },
+    });
     res.json(data);
   } catch (error: any) {
     console.error('Error fetching users:', error);
@@ -125,15 +285,15 @@ app.get('/api/users', async (req, res) => {
 });
 
 // GET /api/inspecoes
-app.get('/api/inspecoes', async (req, res) => {
+app.get('/api/inspecoes', async (_req, res) => {
   try {
     const data = await prisma.inspecao.findMany({
       include: {
         equipamento: true,
         respostas: { include: { item: true } },
-        materiais: { include: { material: true } }
+        materiais: { include: { material: true } },
       },
-      orderBy: { data: 'desc' }
+      orderBy: { data: 'desc' },
     });
     res.json(data);
   } catch (error: any) {
@@ -151,10 +311,10 @@ app.get('/api/inspecoes/:id', async (req, res) => {
       include: {
         equipamento: true,
         respostas: { include: { item: true } },
-        materiais: { include: { material: true } }
-      }
+        materiais: { include: { material: true } },
+      },
     });
-    
+
     if (!data) return res.status(404).json({ error: 'Inspection not found' });
     res.json(data);
   } catch (error: any) {
@@ -166,9 +326,11 @@ app.get('/api/inspecoes/:id', async (req, res) => {
 // POST /api/inspecoes
 app.post('/api/inspecoes', async (req, res) => {
   try {
-    const inspecaoData = req.body;
-    
-    const { respostas, materiais, ...rest } = inspecaoData;
+    const parsed = inspecaoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados da inspeção inválidos.' });
+    }
+    const { respostas, materiais, ...rest } = parsed.data;
 
     const result = await prisma.$transaction(async (tx) => {
       const createdInspecao = await tx.inspecao.create({
@@ -181,19 +343,19 @@ app.post('/api/inspecoes', async (req, res) => {
           localizacao: rest.localizacao,
           status: rest.status,
           observacoesGerais: rest.observacoesGerais,
-          createdById: rest.createdById || null,
+          createdById: rest.createdById || req.user?.sub || null,
           assinaturaUrl: rest.assinaturaUrl || null,
           fotosUrls: rest.fotosUrls || rest.fotosEquipamento || [],
           origem: rest.origem || null,
           destino: rest.destino || null,
           compressorUtilizado: rest.compressorUtilizado || null,
           classificacao: rest.classificacao || null,
-        }
+        },
       });
 
       if (respostas && respostas.length > 0) {
         await tx.respostaItem.createMany({
-          data: respostas.map((r: any) => ({
+          data: respostas.map((r) => ({
             id: r.id,
             inspecaoId: createdInspecao.id,
             itemId: r.itemId,
@@ -205,20 +367,20 @@ app.post('/api/inspecoes', async (req, res) => {
             fotoResolvidaUrl: r.fotoResolvidaUrl || null,
             certificadoId: r.certificadoId || null,
             certificadoValidade: r.certificadoValidade || null,
-            pendenciaResolvida: r.pendenciaResolvida !== undefined ? r.pendenciaResolvida : null,
-          }))
+            pendenciaResolvida: r.pendenciaResolvida ?? null,
+          })),
         });
       }
 
       if (materiais && materiais.length > 0) {
         await tx.materialUtilizado.createMany({
-          data: materiais.map((m: any) => ({
+          data: materiais.map((m) => ({
             id: m.id,
             inspecaoId: createdInspecao.id,
             materialId: m.materialId,
             quantidade: m.quantidade,
             observacao: m.observacao || null,
-          }))
+          })),
         });
       }
 

@@ -140,7 +140,7 @@ export const EquipamentoSelecao: React.FC = () => {
                 type="text"
                 required
                 className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="Ex: Plataforma P-51, Oficina Macaé"
+                placeholder="Ex: Plataforma, Oficina, Base"
                 value={localizacao}
                 onChange={(e) => setLocalizacao(e.target.value)}
               />

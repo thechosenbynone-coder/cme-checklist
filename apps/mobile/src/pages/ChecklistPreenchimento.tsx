@@ -842,13 +842,13 @@ export const ChecklistPreenchimento: React.FC = () => {
                           <div className="relative inline-block">
                             {resp.fotoResolvidaUrl.includes('video-') || resp.fotoResolvidaUrl.endsWith('.webm') || resp.fotoResolvidaUrl.startsWith('data:video/') ? (
                               <video
-                                src={resp.fotoResolvidaUrl}
+                                src={api.mediaUrl(resp.fotoResolvidaUrl)}
                                 controls
                                 className="h-24 w-40 object-cover rounded-lg border border-slate-300 shadow-sm"
                               />
                             ) : (
                               <img
-                                src={resp.fotoResolvidaUrl}
+                                src={api.mediaUrl(resp.fotoResolvidaUrl)}
                                 alt="Reparo resolvido"
                                 className="h-24 w-40 object-cover rounded-lg border border-slate-300 shadow-sm"
                               />
@@ -945,13 +945,13 @@ export const ChecklistPreenchimento: React.FC = () => {
                     <div className="relative w-full aspect-square flex items-center justify-center bg-slate-50 border border-slate-100 rounded-lg overflow-hidden">
                       {foto.includes('video-') || foto.endsWith('.webm') || foto.startsWith('data:video/') ? (
                         <video
-                          src={foto}
+                          src={api.mediaUrl(foto)}
                           controls
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <img
-                          src={foto}
+                          src={api.mediaUrl(foto)}
                           alt={label}
                           className="w-full h-full object-cover"
                         />

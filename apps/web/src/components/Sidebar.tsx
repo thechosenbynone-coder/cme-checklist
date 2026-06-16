@@ -22,7 +22,7 @@ export const Sidebar: React.FC = () => {
   const currentUser = api.auth.currentUser();
 
   const handleLogout = () => {
-    window.localStorage.removeItem('cme_current_user');
+    api.auth.logout();
     navigate('/login');
   };
 

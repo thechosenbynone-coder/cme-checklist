@@ -11,7 +11,8 @@ export interface User {
   id: string;
   nome: string;
   email: string;
-  funcao?: string; // Ex: Operador, Supervisor, Gestor, Compras, Admin
+  funcao?: string; // OPERADOR | SUPERVISOR | GESTOR | ADMIN
+  ativo?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

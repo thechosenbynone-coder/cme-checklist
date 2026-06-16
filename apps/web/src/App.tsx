@@ -8,9 +8,7 @@ import api from './services/api';
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const currentUser = api.auth.currentUser();
-  
-  if (!currentUser) {
+  if (!api.auth.isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
 
