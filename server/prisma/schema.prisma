@@ -46,15 +46,45 @@ model User {
 
 model Equipamento {
   id          String   @id @default(uuid())
-  codigo      String   @unique
+  codigo      String   @unique // código canônico (com hífen) — chave de negócio
+  codigoExibicao String?       // código original da planilha
+  chaveBusca  String?          // normalizado (só alfanumérico) p/ busca inteligente
   nome        String
   tipo        String   // After Cooler, Compressor, etc.
+  fabricante  String?
   localizacao String?
+  localizacaoAtual String?     // coluna ATUAL da planilha
+  estado      String?
   status      String?  // Ativo, Manutenção, etc.
+  statusLiberacao String @default("PENDENTE") // PENDENTE | LIBERADO | VENCIDO
+  validadeCertificado DateTime?
+  arquivoCertDriveUrl String?
+  dadosPlanilha Json?          // preserva TODAS as colunas da planilha (p/ a Logística)
+  syncStatus  String?  @default("IMPORTADO")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  inspecoes Inspecao[]
+  inspecoes   Inspecao[]
+  certificados Certificado[]
+
+  @@index([chaveBusca])
+  @@index([tipo])
+}
+
+model Certificado {
+  id            String   @id @default(uuid())
+  equipamentoId String
+  tipo          String   // EQUIPAMENTO | ESLINGA | PSV | MANOMETRO | NR13 | CONTAINER ...
+  numero        String?
+  emissao       DateTime?
+  validade      DateTime?
+  orgaoEmissor  String?
+  arquivoUrl    String?
+  createdAt     DateTime @default(now())
+
+  equipamento   Equipamento @relation(fields: [equipamentoId], references: [id], onDelete: Cascade)
+
+  @@index([equipamentoId])
 }
 
 model ChecklistModelo {

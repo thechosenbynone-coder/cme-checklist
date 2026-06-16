@@ -7,3 +7,11 @@ body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   @apply bg-slate-50 text-slate-900;
 }
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0.6; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-slideInRight {
+  animation: slideInRight 0.22s ease-out;
+}

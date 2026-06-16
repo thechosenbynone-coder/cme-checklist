@@ -14,6 +14,7 @@ import {
   requireRole,
   type Funcao,
 } from './auth.js';
+import { normalizeChave } from './equipamentos/parsePlanilha.js';
 
 dotenv.config();
 const app = express();
@@ -230,13 +231,68 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// GET /api/equipamentos
-app.get('/api/equipamentos', async (_req, res) => {
+// Status de liberação dinâmico: LIBERADO se há checklist VALIDADA sem pendência aberta;
+// VENCIDO se o certificado expirou; senão PENDENTE.
+function calcularStatusLiberacao(eq: any): 'PENDENTE' | 'LIBERADO' | 'VENCIDO' {
+  const inspecoes = eq.inspecoes || [];
+  const liberado = inspecoes.some(
+    (i: any) =>
+      i.status === 'VALIDADA' &&
+      !(i.respostas || []).some((r: any) => r.status === 'PENDENTE' && r.pendenciaResolvida !== true)
+  );
+  if (liberado) return 'LIBERADO';
+  if (eq.validadeCertificado && new Date(eq.validadeCertificado) < new Date()) return 'VENCIDO';
+  return 'PENDENTE';
+}
+
+// GET /api/equipamentos  (busca inteligente via ?busca=)
+app.get('/api/equipamentos', async (req, res) => {
   try {
-    const data = await prisma.equipamento.findMany({ orderBy: { codigo: 'asc' } });
+    const busca = typeof req.query.busca === 'string' ? req.query.busca.trim() : '';
+    let where: any = {};
+    if (busca) {
+      const chave = normalizeChave(busca);
+      where = {
+        OR: [
+          ...(chave ? [{ chaveBusca: { contains: chave } }] : []),
+          { codigoExibicao: { contains: busca, mode: 'insensitive' } },
+          { codigo: { contains: busca, mode: 'insensitive' } },
+          { nome: { contains: busca, mode: 'insensitive' } },
+          { tipo: { contains: busca, mode: 'insensitive' } },
+          { localizacaoAtual: { contains: busca, mode: 'insensitive' } },
+        ],
+      };
+    }
+    const data = await prisma.equipamento.findMany({
+      where,
+      orderBy: { codigo: 'asc' },
+      include: { _count: { select: { certificados: true, inspecoes: true } } },
+    });
     res.json(data);
   } catch (error: any) {
     console.error('Error fetching equipamentos:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// GET /api/equipamentos/:id  (detalhe: certificados + histórico + status calculado)
+app.get('/api/equipamentos/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const eq = await prisma.equipamento.findFirst({
+      where: { OR: [{ id }, { codigo: id }] },
+      include: {
+        certificados: { orderBy: { validade: 'asc' } },
+        inspecoes: {
+          orderBy: { data: 'desc' },
+          include: { respostas: true },
+        },
+      },
+    });
+    if (!eq) return res.status(404).json({ error: 'Equipamento não encontrado.' });
+    res.json({ ...eq, statusLiberacao: calcularStatusLiberacao(eq) });
+  } catch (error: any) {
+    console.error('Error fetching equipamento details:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });

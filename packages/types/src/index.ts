@@ -19,13 +19,36 @@ export interface User {
 
 export interface Equipamento {
   id: string;
-  codigo: string;
+  codigo: string;                 // código canônico (com hífen) — chave de negócio
+  codigoExibicao?: string;        // código original da planilha
+  chaveBusca?: string;            // normalizado (só alfanumérico) p/ busca inteligente
   nome: string;
   tipo: string; // Ex: After Cooler, Compressor, etc.
+  fabricante?: string;
   localizacao?: string;
+  localizacaoAtual?: string;      // coluna ATUAL da planilha
+  estado?: string;
   status?: string; // Ex: Ativo, Manutenção, etc.
+  statusLiberacao?: 'PENDENTE' | 'LIBERADO' | 'VENCIDO';
+  validadeCertificado?: string;
+  arquivoCertDriveUrl?: string;
+  dadosPlanilha?: Record<string, unknown>; // preserva TODAS as colunas da planilha
+  syncStatus?: string;
   createdAt?: string;
   updatedAt?: string;
+  certificados?: Certificado[];
+}
+
+export interface Certificado {
+  id: string;
+  equipamentoId: string;
+  tipo: string;            // EQUIPAMENTO | ESLINGA | PSV | MANOMETRO | NR13 | CONTAINER ...
+  numero?: string;
+  emissao?: string;
+  validade?: string;
+  orgaoEmissor?: string;
+  arquivoUrl?: string;
+  createdAt?: string;
 }
 
 export interface ChecklistModelo {

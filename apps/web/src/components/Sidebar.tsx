@@ -37,7 +37,7 @@ export const Sidebar: React.FC = () => {
   // Itens do Menu
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard, enabled: true },
-    { path: '/equipamentos', label: 'Equipamentos (Em breve)', icon: Wrench, enabled: false },
+    { path: '/equipamentos', label: 'Equipamentos', icon: Wrench, enabled: true },
     { path: '/materiais', label: 'Materiais (Em breve)', icon: FileSpreadsheet, enabled: false },
     { path: '/configuracoes', label: 'Configurações', icon: Settings, enabled: false }
   ];
