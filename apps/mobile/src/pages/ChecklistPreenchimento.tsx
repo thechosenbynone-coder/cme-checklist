@@ -12,10 +12,12 @@ export const ChecklistPreenchimento: React.FC = () => {
   const [modelo, setModelo] = useState<ChecklistModelo | null>(null);
   
   // Respostas e Materiais catalog
-  const [respostas, setRespostas] = useState<Record<string, { 
-    status?: StatusItem; 
-    observacao: string; 
+  const [respostas, setRespostas] = useState<Record<string, {
+    status?: StatusItem;
+    observacao: string;
     responsavel: string;
+    valorNumerico?: number;
+    valorTexto?: string;
     certificadoId?: string;
     certificadoValidade?: string;
     fotoBase64?: string;
@@ -140,6 +142,8 @@ export const ChecklistPreenchimento: React.FC = () => {
                   status: undefined,
                   observacao: '',
                   responsavel: '',
+                  valorNumerico: undefined,
+                  valorTexto: '',
                   certificadoId: '',
                   certificadoValidade: '',
                   fotoBase64: undefined,
@@ -265,6 +269,22 @@ export const ChecklistPreenchimento: React.FC = () => {
     }));
   };
 
+  // MEDICAO: valor numérico
+  const handleValorNumerico = (itemId: string, valorNumerico: number | undefined) => {
+    setRespostas(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], valorNumerico }
+    }));
+  };
+
+  // TEXTO: valor texto
+  const handleValorTexto = (itemId: string, valorTexto: string) => {
+    setRespostas(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], valorTexto }
+    }));
+  };
+
 
 
   // Add Material to usage list
@@ -338,9 +358,11 @@ export const ChecklistPreenchimento: React.FC = () => {
       id: `resp-${itemId}-${Date.now()}`,
       inspecaoId,
       itemId,
-      status: value.status!,
+      status: value.status,
       observacao: value.observacao || undefined,
       responsavel: value.responsavel || undefined,
+      valorNumerico: value.valorNumerico,
+      valorTexto: value.valorTexto || undefined,
       certificadoId: value.certificadoId || undefined,
       certificadoValidade: value.certificadoValidade || undefined,
       fotoUrl: value.fotoUrl || undefined,
@@ -362,6 +384,8 @@ export const ChecklistPreenchimento: React.FC = () => {
       equipamentoId: equipamento.id,
       tipo: metadata.tipo,
       data: new Date().toISOString(),
+      modeloId: modelo.id,
+      modeloVersao: modelo.versao,
       responsavelGeral: metadata.responsavelGeral,
       localizacao: metadata.localizacao,
       status: 'CONCLUIDA',
@@ -454,30 +478,29 @@ export const ChecklistPreenchimento: React.FC = () => {
       const item = modelo?.itens?.[step.itemIndex];
       if (item) {
         const resp = respostas[item.id];
-        if (!resp || !resp.status) {
-          alert('Por favor, selecione uma opção (OK, Pendente ou N/A) para este item antes de avançar.');
-          return;
-        }
-        
-        // Se status for OK e necessitar certificado, validar se preenchidos
-        if (resp.status === 'OK') {
-          const isIdAndValid = item.descricao.includes('(ID/VALID)');
-          const isValidOnly = item.descricao.includes('(VALID)');
-          
-          if (isIdAndValid || isValidOnly) {
-            const hasId = !isIdAndValid || (resp.certificadoId && resp.certificadoId.trim());
+        const tipo = item.tipo || 'STATUS';
+        const exigeStatus = tipo === 'STATUS' || tipo === 'CERTIFICADO';
+
+        // MEDICAO/TEXTO não têm status — avanço livre (opcionais).
+        if (exigeStatus) {
+          if (!resp || !resp.status) {
+            alert('Por favor, selecione uma opção (OK, Pendente ou N/A) para este item antes de avançar.');
+            return;
+          }
+
+          // Certificado com status OK exige a validade (ID é opcional).
+          if (tipo === 'CERTIFICADO' && resp.status === 'OK') {
             const hasVal = resp.certificadoValidade && resp.certificadoValidade.trim();
-            
-            if (!hasId || !hasVal) {
-              alert('Por favor, preencha as informações de certificação (ID e/ou Validade) para este item antes de avançar.');
+            if (!hasVal) {
+              alert('Por favor, preencha a Validade do certificado para este item antes de avançar.');
               return;
             }
           }
-        }
-        
-        if (resp.status === 'PENDENTE' && (!resp.observacao || !resp.observacao.trim())) {
-          alert('Atenção: Ao marcar como Pendente, você deve detalhar o problema no campo de Observação.');
-          return;
+
+          if (resp.status === 'PENDENTE' && (!resp.observacao || !resp.observacao.trim())) {
+            alert('Atenção: Ao marcar como Pendente, você deve detalhar o problema no campo de Observação.');
+            return;
+          }
         }
       }
     } else if (step.type === 'pendencies') {
@@ -528,17 +551,31 @@ export const ChecklistPreenchimento: React.FC = () => {
     if (step.type === 'item' && step.itemIndex !== undefined) {
       const item = modelo.itens?.[step.itemIndex];
       if (!item) return null;
-      const resp = respostas[item.id] || { status: undefined, observacao: '', responsavel: '', certificadoId: '', certificadoValidade: '', fotoBase64: undefined };
-      const isIdAndValid = item.descricao.includes('(ID/VALID)');
-      const isValidOnly = item.descricao.includes('(VALID)');
+      const resp = respostas[item.id] || { status: undefined, observacao: '', responsavel: '', certificadoId: '', certificadoValidade: '', valorNumerico: undefined, valorTexto: '' };
+      const tipo = item.tipo || 'STATUS';
+      const isCert = tipo === 'CERTIFICADO';
+      const isMedicao = tipo === 'MEDICAO';
+      const isTexto = tipo === 'TEXTO';
+      const showStatus = tipo === 'STATUS' || isCert;
       const totalItens = modelo.itens?.length || 0;
+
+      const TIPO_BADGE: Record<string, { label: string; cls: string }> = {
+        STATUS: { label: 'Verificação', cls: 'bg-[#0b132b] text-white' },
+        CERTIFICADO: { label: 'Certificado', cls: 'bg-indigo-600 text-white' },
+        MEDICAO: { label: 'Medição', cls: 'bg-sky-600 text-white' },
+        TEXTO: { label: 'Observação', cls: 'bg-slate-600 text-white' },
+      };
+      const badge = TIPO_BADGE[tipo] || TIPO_BADGE.STATUS;
 
       return (
         <div className="space-y-5 animate-fadeIn w-full">
-          {/* Section Indicator */}
-          <div className="flex justify-center">
+          {/* Section Indicator + tipo */}
+          <div className="flex flex-wrap justify-center gap-2">
             <span className="bg-[#0b132b] text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-wider shadow-sm text-center">
               {item.secao}
+            </span>
+            <span className={`text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wider shadow-sm ${badge.cls}`}>
+              {badge.label}
             </span>
           </div>
 
@@ -551,25 +588,23 @@ export const ChecklistPreenchimento: React.FC = () => {
               </p>
             </div>
 
-            {/* Certificado Inputs */}
-            {(isIdAndValid || isValidOnly) && (
+            {/* CERTIFICADO: ID + Validade */}
+            {isCert && (
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-4 text-left">
                 <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Informações de Certificação</span>
                 <div className="grid grid-cols-2 gap-2">
-                  {isIdAndValid && (
-                    <div>
-                      <label className="block text-[8px] font-bold text-slate-500 mb-1">ID do Certificado</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: ID-10023"
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                        value={resp.certificadoId || ''}
-                        onChange={(e) => handleCertIdChange(item.id, e.target.value)}
-                      />
-                    </div>
-                  )}
-                  <div className={isIdAndValid ? "" : "col-span-2"}>
-                    <label className="block text-[8px] font-bold text-slate-500 mb-1">Validade do Certificado</label>
+                  <div>
+                    <label className="block text-[8px] font-bold text-slate-500 mb-1">ID do Certificado</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: ID-10023"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                      value={resp.certificadoId || ''}
+                      onChange={(e) => handleCertIdChange(item.id, e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[8px] font-bold text-slate-500 mb-1">Validade do Certificado <span className="text-red-500">*</span></label>
                     <input
                       type="text"
                       placeholder="Ex: DD/MM/AAAA"
@@ -581,103 +616,140 @@ export const ChecklistPreenchimento: React.FC = () => {
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Status Selection Buttons - 3-button grid */}
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => handleStatusChange(item.id, 'OK')}
-              className={`py-3.5 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border transition-all active:scale-98 ${
-                resp.status === 'OK'
-                  ? 'bg-green-600 border-green-600 text-white shadow-md shadow-green-500/10'
-                  : 'bg-white border-green-200 text-green-700 hover:bg-green-50'
-              }`}
-            >
-              <Check className="h-4.5 w-4.5" />
-              <span>OK</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleStatusChange(item.id, 'PENDENTE')}
-              className={`py-3.5 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border transition-all active:scale-98 ${
-                resp.status === 'PENDENTE'
-                  ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-md shadow-amber-500/10'
-                  : 'bg-white border-amber-255 text-amber-700 hover:bg-amber-50'
-              }`}
-            >
-              <AlertTriangle className="h-4.5 w-4.5" />
-              <span>Pendente</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleStatusChange(item.id, 'NAO_APLICAVEL')}
-              className={`py-3.5 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border transition-all active:scale-98 ${
-                resp.status === 'NAO_APLICAVEL'
-                  ? 'bg-slate-500 border-slate-500 text-white shadow-md shadow-slate-500/10'
-                  : 'bg-white border-slate-350 text-slate-650 hover:bg-slate-50'
-              }`}
-            >
-              <HelpCircle className="h-4.5 w-4.5" />
-              <span>N/A</span>
-            </button>
-          </div>
-
-          {/* Observations and Responsável */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 shadow-sm">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                Observações {resp.status === 'PENDENTE' && <span className="text-red-500">*</span>}
-              </label>
-              <input
-                type="text"
-                placeholder={resp.status === 'PENDENTE' ? "O que está pendente? (Obrigatório)..." : "Descreva observações do item (opcional)..."}
-                className={`w-full px-3 py-2 border rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200 ${
-                  resp.status === 'PENDENTE' && !resp.observacao.trim() ? 'border-red-300 focus:ring-red-200 focus:border-red-400' : 'border-slate-200'
-                }`}
-                value={resp.observacao}
-                onChange={(e) => handleObsChange(item.id, e.target.value)}
-              />
-            </div>
-
-            {/* Adicionar Responsável */}
-            <div className="pt-1">
-              {!showRespMap[item.id] && !resp.responsavel ? (
-                <button
-                  type="button"
-                  onClick={() => toggleResp(item.id)}
-                  className="w-full text-center text-xs font-semibold text-[#0b132b] hover:text-[#1b2a47] py-2 border border-dashed border-slate-300 rounded-lg bg-slate-50 transition"
-                >
-                  + Adicionar Responsável (Executante)
-                </button>
-              ) : (
-                <div className="space-y-1.5 animate-slideDown">
-                  <div className="flex justify-between items-center">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase">Responsável (Executante)</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleRespChange(item.id, '');
-                        toggleResp(item.id);
-                      }}
-                      className="text-[9px] text-red-500 hover:text-red-700 font-bold"
-                    >
-                      Remover
-                    </button>
-                  </div>
+            {/* MEDICAO: valor numérico + unidade */}
+            {isMedicao && (
+              <div className="p-4 bg-sky-50 rounded-xl border border-sky-200/80 text-left">
+                <label className="block text-[9px] font-bold text-sky-700 uppercase tracking-widest mb-1.5">Leitura {item.unidade ? `(${item.unidade})` : ''}</label>
+                <div className="flex items-center gap-2">
                   <input
-                    type="text"
-                    placeholder="Nome de quem executou a verificação"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                    value={resp.responsavel}
-                    onChange={(e) => handleRespChange(item.id, e.target.value)}
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    placeholder="0"
+                    className="w-full px-3 py-2.5 border border-sky-200 rounded-lg text-base font-bold bg-white text-slate-900 placeholder-slate-300 outline-none focus:ring-2 focus:ring-sky-200"
+                    value={resp.valorNumerico ?? ''}
+                    onChange={(e) => handleValorNumerico(item.id, e.target.value === '' ? undefined : parseFloat(e.target.value))}
                   />
+                  {item.unidade && <span className="text-sm font-extrabold text-sky-700">{item.unidade}</span>}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* TEXTO: observação livre */}
+            {isTexto && (
+              <div className="text-left">
+                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Texto / Observação</label>
+                <textarea
+                  rows={5}
+                  placeholder="Descreva aqui..."
+                  className="w-full p-3 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                  value={resp.valorTexto || ''}
+                  onChange={(e) => handleValorTexto(item.id, e.target.value)}
+                />
+              </div>
+            )}
           </div>
+
+          {/* Status buttons — só STATUS e CERTIFICADO */}
+          {showStatus && (
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handleStatusChange(item.id, 'OK')}
+                className={`py-3.5 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border transition-all active:scale-98 ${
+                  resp.status === 'OK'
+                    ? 'bg-green-600 border-green-600 text-white shadow-md shadow-green-500/10'
+                    : 'bg-white border-green-200 text-green-700 hover:bg-green-50'
+                }`}
+              >
+                <Check className="h-4.5 w-4.5" />
+                <span>OK</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleStatusChange(item.id, 'PENDENTE')}
+                className={`py-3.5 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border transition-all active:scale-98 ${
+                  resp.status === 'PENDENTE'
+                    ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-md shadow-amber-500/10'
+                    : 'bg-white border-amber-255 text-amber-700 hover:bg-amber-50'
+                }`}
+              >
+                <AlertTriangle className="h-4.5 w-4.5" />
+                <span>Pendente</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleStatusChange(item.id, 'NAO_APLICAVEL')}
+                className={`py-3.5 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border transition-all active:scale-98 ${
+                  resp.status === 'NAO_APLICAVEL'
+                    ? 'bg-slate-500 border-slate-500 text-white shadow-md shadow-slate-500/10'
+                    : 'bg-white border-slate-350 text-slate-650 hover:bg-slate-50'
+                }`}
+              >
+                <HelpCircle className="h-4.5 w-4.5" />
+                <span>N/A</span>
+              </button>
+            </div>
+          )}
+
+          {/* Observações e Responsável — não para TEXTO (o próprio campo é a observação) */}
+          {!isTexto && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 shadow-sm">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  Observações {resp.status === 'PENDENTE' && <span className="text-red-500">*</span>}
+                </label>
+                <input
+                  type="text"
+                  placeholder={resp.status === 'PENDENTE' ? "O que está pendente? (Obrigatório)..." : "Descreva observações do item (opcional)..."}
+                  className={`w-full px-3 py-2 border rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200 ${
+                    resp.status === 'PENDENTE' && !resp.observacao.trim() ? 'border-red-300 focus:ring-red-200 focus:border-red-400' : 'border-slate-200'
+                  }`}
+                  value={resp.observacao}
+                  onChange={(e) => handleObsChange(item.id, e.target.value)}
+                />
+              </div>
+
+              {/* Adicionar Responsável */}
+              <div className="pt-1">
+                {!showRespMap[item.id] && !resp.responsavel ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleResp(item.id)}
+                    className="w-full text-center text-xs font-semibold text-[#0b132b] hover:text-[#1b2a47] py-2 border border-dashed border-slate-300 rounded-lg bg-slate-50 transition"
+                  >
+                    + Adicionar Responsável (Executante)
+                  </button>
+                ) : (
+                  <div className="space-y-1.5 animate-slideDown">
+                    <div className="flex justify-between items-center">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase">Responsável (Executante)</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleRespChange(item.id, '');
+                          toggleResp(item.id);
+                        }}
+                        className="text-[9px] text-red-500 hover:text-red-700 font-bold"
+                      >
+                        Remover
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Nome de quem executou a verificação"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                      value={resp.responsavel}
+                      onChange={(e) => handleRespChange(item.id, e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       );
     }

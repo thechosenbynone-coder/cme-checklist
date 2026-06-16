@@ -1,6 +1,9 @@
 // Status de cada item do checklist
 export type StatusItem = 'OK' | 'PENDENTE' | 'NAO_APLICAVEL';
 
+// Tipo de item do checklist (builder tipado)
+export type TipoItem = 'STATUS' | 'CERTIFICADO' | 'MEDICAO' | 'TEXTO';
+
 // Status da inspeção geral
 export type StatusInspecao = 'EM_ANDAMENTO' | 'CONCLUIDA' | 'VALIDADA' | 'CANCELADA';
 
@@ -68,15 +71,19 @@ export interface ItemChecklist {
   descricao: string;
   ordem: number;
   obrigatorio: boolean;
+  tipo: TipoItem;       // STATUS | CERTIFICADO | MEDICAO | TEXTO
+  unidade?: string;     // p/ MEDICAO: '°C', 'A', 'bar'
 }
 
 export interface RespostaItem {
   id: string;
   inspecaoId: string;
   itemId: string;
-  status: StatusItem;
+  status?: StatusItem;  // opcional: MEDICAO/TEXTO não têm OK/Pendente/N-A
   observacao?: string;
   responsavel?: string; // Quem executou aquela verificação
+  valorNumerico?: number; // MEDICAO (temperatura, amperagem)
+  valorTexto?: string;    // TEXTO (observações livres)
   certificadoId?: string;
   certificadoValidade?: string;
   /** @deprecated Use fotoUrl instead */
@@ -116,6 +123,8 @@ export interface Inspecao {
   equipamentoId: string;
   tipo: TipoInspecao;
   data: string; // ISO String
+  modeloId?: string;     // versão do template usada (ISO 9001 — rastreabilidade)
+  modeloVersao?: number;
   responsavelGeral?: string;
   localizacao?: string;
   status: StatusInspecao;

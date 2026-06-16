@@ -96,6 +96,9 @@ model ChecklistModelo {
   createdAt   DateTime @default(now())
 
   itens ItemChecklist[]
+  inspecoes Inspecao[]
+
+  @@index([tipoEquipamento, ativo])
 }
 
 model ItemChecklist {
@@ -105,6 +108,8 @@ model ItemChecklist {
   descricao   String
   ordem       Int
   obrigatorio Boolean  @default(true)
+  tipo        String   @default("STATUS") // STATUS | CERTIFICADO | MEDICAO | TEXTO
+  unidade     String?  // p/ MEDICAO: '°C', 'A', 'bar'
 
   modelo ChecklistModelo @relation(fields: [modeloId], references: [id], onDelete: Cascade)
   respostas  RespostaItem[]
@@ -115,6 +120,8 @@ model Inspecao {
   equipamentoId String
   tipo          TipoInspecao
   data          DateTime @default(now())
+  modeloId      String?  // versão do template usada (ISO 9001 — rastreabilidade)
+  modeloVersao  Int?
   responsavelGeral String?  // Nome do responsável principal
   localizacao   String?
   status        StatusInspecao @default(EM_ANDAMENTO)
@@ -128,6 +135,7 @@ model Inspecao {
   classificacao   String?
 
   equipamento Equipamento @relation(fields: [equipamentoId], references: [id])
+  modelo      ChecklistModelo? @relation(fields: [modeloId], references: [id])
   createdBy   User?       @relation("InspecaoCriadaPor", fields: [createdById], references: [id])
   respostas   RespostaItem[]
   materiais   MaterialUtilizado[]
@@ -139,9 +147,11 @@ model RespostaItem {
   id          String   @id @default(uuid())
   inspecaoId  String
   itemId      String
-  status      StatusItem
+  status      StatusItem?  // opcional: MEDICAO/TEXTO não têm OK/Pendente/N-A
   observacao  String?
   responsavel String?  // Quem executou aquela tarefa específica (elétrica, pintura, etc.)
+  valorNumerico Float?   // MEDICAO (temperatura, amperagem)
+  valorTexto    String?  // TEXTO (observações livres)
   createdById String?
   fotoUrl         String?   // URL do Drive (substitui fotoBase64)
   fotoResolvidaUrl String?  // URL do Drive (substitui fotoResolvidaBase64)

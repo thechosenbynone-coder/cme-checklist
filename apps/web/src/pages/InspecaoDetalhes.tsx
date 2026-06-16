@@ -170,6 +170,20 @@ export const InspecaoDetalhes: React.FC = () => {
                         </div>
                       )}
 
+                      {/* Medição (valor numérico + unidade) */}
+                      {resp.item?.tipo === 'MEDICAO' && (
+                        <div className="mt-1.5 text-xs bg-sky-50 border border-sky-100 text-sky-800 px-2.5 py-1 rounded-lg max-w-fit font-semibold">
+                          Leitura: <strong>{resp.valorNumerico ?? '—'}</strong> {resp.item?.unidade || ''}
+                        </div>
+                      )}
+
+                      {/* Texto (observação livre) */}
+                      {resp.item?.tipo === 'TEXTO' && resp.valorTexto && (
+                        <p className="mt-1.5 text-xs text-slate-700 bg-slate-50 border border-slate-100 p-2 rounded-lg whitespace-pre-wrap">
+                          {resp.valorTexto}
+                        </p>
+                      )}
+
                       {/* Evidência Fotográfica da Plaqueta */}
                       {(resp.fotoUrl || resp.fotoBase64) && (
                         <div className="mt-2.5">
@@ -239,9 +253,17 @@ export const InspecaoDetalhes: React.FC = () => {
                         ) : (
                           <Badge type="danger" label="Pendente Ativo" />
                         )
-                      ) : (
+                      ) : resp.item?.tipo === 'MEDICAO' ? (
+                        <span className="text-xs font-extrabold bg-sky-50 border border-sky-150 text-sky-700 px-2.5 py-1 rounded-full">
+                          {resp.valorNumerico ?? '—'} {resp.item?.unidade || ''}
+                        </span>
+                      ) : resp.item?.tipo === 'TEXTO' ? (
+                        <span className="text-[10px] font-extrabold bg-slate-100 border border-slate-200 text-slate-600 px-2.5 py-1 rounded-full uppercase">
+                          Observação
+                        </span>
+                      ) : resp.status ? (
                         <Badge type={resp.status} />
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 ))}

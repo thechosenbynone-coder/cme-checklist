@@ -39,38 +39,58 @@ async function main() {
     }
   });
 
-  console.log('Seeding ItemChecklist...');
+  console.log('Seeding ItemChecklist (After Cooler — fiel ao OPE-PC-03, tipado)...');
+  // tipo: STATUS | CERTIFICADO | MEDICAO | TEXTO. obrigatorio=false p/ medição/texto.
+  const S = 'STATUS', C = 'CERTIFICADO', M = 'MEDICAO', T = 'TEXTO';
+  const SEC_CONT = 'INSPEÇÃO DO CONTAINER E LINGADA';
+  const SEC_GERAL = 'INSPEÇÃO GERAL';
+  const SEC_PNEU_D = 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (DESPRESSURIZADO)';
+  const SEC_ELE = 'INSPEÇÃO DO SISTEMA ELÉTRICO';
+  const SEC_PNEU_P = 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (PRESSURIZADO)';
+  const SEC_TESTE = 'TESTE OPERACIONAL DO SISTEMA';
+
   const itens = [
-    { id: 'it-1', modeloId: 'mod-1', secao: 'INSPEÇÃO DO CONTAINER E LINGADA', ordem: 1, descricao: 'Verificar validade do certificado do container (ID/VALID)', obrigatorio: true },
-    { id: 'it-2', modeloId: 'mod-1', secao: 'INSPEÇÃO DO CONTAINER E LINGADA', ordem: 2, descricao: 'Verificar validade do certificado da lingada (ID/VALID)', obrigatorio: true },
-    { id: 'it-3', modeloId: 'mod-1', secao: 'INSPEÇÃO GERAL', ordem: 3, descricao: 'Verificar dessalinização e limpeza do radiador e skid', obrigatorio: true },
-    { id: 'it-4', modeloId: 'mod-1', secao: 'INSPEÇÃO GERAL', ordem: 4, descricao: 'Remover objetos soltos dentro do skid', obrigatorio: true },
-    { id: 'it-5', modeloId: 'mod-1', secao: 'INSPEÇÃO GERAL', ordem: 5, descricao: 'Inspecionar visualmente o conjunto de içamento (pintura, travamento das manilhas com contra-pinos, lubrificação e danos dos cabos de aço) - substituir caso necessário', obrigatorio: true },
-    { id: 'it-6', modeloId: 'mod-1', secao: 'INSPEÇÃO GERAL', ordem: 6, descricao: 'Conferir se todos os manômetros e vasos de pressão estão íntegros e identificados com adesivos de certificação e NR13', obrigatorio: true },
-    { id: 'it-7', modeloId: 'mod-1', secao: 'INSPEÇÃO GERAL', ordem: 7, descricao: 'Inspecionar limpeza, identificação e danos físicos ao Skid (interno e externo), incluindo porcas, parafusos e travões', obrigatorio: true },
-    { id: 'it-8', modeloId: 'mod-1', secao: 'INSPEÇÃO GERAL', ordem: 8, descricao: 'Conferir fechamento total dos painéis elétricos, verificar se faltam parafusos, adesivos de "440 VOLTS" e "PERIGO PAINEL ELÉTRICO", verificação visual de dano ao cabo elétrico de alimentação e prensa cabos', obrigatorio: true },
-    { id: 'it-9', modeloId: 'mod-1', secao: 'INSPEÇÃO GERAL', ordem: 9, descricao: 'Verificar etiqueta externa de status do equipamento (laranja/verde/vermelha)', obrigatorio: true },
-    { id: 'it-10', modeloId: 'mod-1', secao: 'INSPEÇÃO GERAL', ordem: 10, descricao: 'Verificar danos no radiador', obrigatorio: true },
-    { id: 'it-11', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (DESPRESSURIZADO)', ordem: 11, descricao: 'Verificar certificação da válvula de segurança (PSV) (ID/VALID)', obrigatorio: true },
-    { id: 'it-12', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (DESPRESSURIZADO)', ordem: 12, descricao: 'Verificar certificação do manômetro (VALID)', obrigatorio: true },
-    { id: 'it-13', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (DESPRESSURIZADO)', ordem: 13, descricao: 'Verificar certificação NR13 dos reservatórios de ar (ID/VALID)', obrigatorio: true },
-    { id: 'it-14', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (DESPRESSURIZADO)', ordem: 14, descricao: 'Inspecionar filtros coalescentes, confirmar sequência FEP, FEO, FEOA', obrigatorio: true },
-    { id: 'it-15', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (DESPRESSURIZADO)', ordem: 15, descricao: 'Inspecionar rolamento (graxa dos mancais) e correias do ventilador', obrigatorio: true },
-    { id: 'it-16', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA ELÉTRICO', ordem: 16, descricao: 'Abrir o painel e verificar reaperto de todos os componentes', obrigatorio: true },
-    { id: 'it-17', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA ELÉTRICO', ordem: 17, descricao: 'Verificar cabos e prensa cabos na entrada do painel elétrico, motor e luminária (em caso de danos substituir)', obrigatorio: true },
-    { id: 'it-18', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA ELÉTRICO', ordem: 18, descricao: 'Verificar funcionamento do sistema 440 VCA e megar motor', obrigatorio: true },
-    { id: 'it-19', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA ELÉTRICO', ordem: 19, descricao: 'Verificar amperagem nas 3 fases do motor elétrico (em funcionamento)', obrigatorio: true },
-    { id: 'it-20', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA ELÉTRICO', ordem: 20, descricao: 'Verificar funcionamento da iluminação', obrigatorio: true },
-    { id: 'it-21', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (PRESSURIZADO)', ordem: 21, descricao: 'Verificar se a válvula de controle de pressão (PRV) está regulada para 10 bar e testar estanqueidade', obrigatorio: true },
-    { id: 'it-22', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (PRESSURIZADO)', ordem: 22, descricao: 'Verificar se as válvulas manuais do manifold de entrada de ar comprimido estão funcionando corretamente e se as conexões Hammer estão íntegras e com anéis de vedação', obrigatorio: true },
-    { id: 'it-23', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (PRESSURIZADO)', ordem: 23, descricao: 'Drenar água dos reservatórios de ar e drenos, verificar mangotes e funcionamento das válvulas', obrigatorio: true },
-    { id: 'it-24', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (PRESSURIZADO)', ordem: 24, descricao: 'Verificar se existem vazamentos nos flanges e tubulações', obrigatorio: true },
-    { id: 'it-25', modeloId: 'mod-1', secao: 'INSPEÇÃO DO SISTEMA PNEUMÁTICO (PRESSURIZADO)', ordem: 25, descricao: 'Verificar se existem vazamentos na colmeia do radiador', obrigatorio: true },
-    { id: 'it-26', modeloId: 'mod-1', secao: 'TESTE OPERACIONAL DO SISTEMA', ordem: 26, descricao: 'Temperatura no manifold de entrada de ar comprimido (Celsius)', obrigatorio: false },
-    { id: 'it-27', modeloId: 'mod-1', secao: 'TESTE OPERACIONAL DO SISTEMA', ordem: 27, descricao: 'Temperatura no manifold de saída de ar comprimido (Celsius)', obrigatorio: false },
+    // 1. CONTAINER E LINGADA (certificados)
+    { id: 'it-1', secao: SEC_CONT, ordem: 1, descricao: 'Verificar validade do certificado do CONTAINER', tipo: C, obrigatorio: true },
+    { id: 'it-2', secao: SEC_CONT, ordem: 2, descricao: 'Verificar validade do certificado da LINGADA', tipo: C, obrigatorio: true },
+    // 2. INSPEÇÃO GERAL
+    { id: 'it-3', secao: SEC_GERAL, ordem: 3, descricao: 'Verificar dessalinização e limpeza do radiador e skid', tipo: S, obrigatorio: true },
+    { id: 'it-4', secao: SEC_GERAL, ordem: 4, descricao: 'Remover objetos soltos dentro do skid', tipo: S, obrigatorio: true },
+    { id: 'it-5', secao: SEC_GERAL, ordem: 5, descricao: 'Inspecionar visualmente o conjunto de içamento (pintura, travamento das manilhas com contra-pinos, lubrificação e danos dos cabos de aço) - substituir o conjunto caso necessário', tipo: S, obrigatorio: true },
+    { id: 'it-6', secao: SEC_GERAL, ordem: 6, descricao: 'Conferir se todos os manômetros e vasos de pressão estão íntegros e identificados com adesivos de certificação e NR13', tipo: S, obrigatorio: true },
+    { id: 'it-7', secao: SEC_GERAL, ordem: 7, descricao: 'Inspecionar limpeza, identificação e danos físicos ao Skid (interno e externo), incluindo porcas, parafusos e travões', tipo: S, obrigatorio: true },
+    { id: 'it-8', secao: SEC_GERAL, ordem: 8, descricao: 'Conferir fechamento total dos painéis elétricos, verificar se faltam parafusos, adesivos de "440 VOLTS" e "PERIGO PAINEL ELÉTRICO", verificação visual de dano ao cabo elétrico de alimentação e prensa cabos no painel elétrico e motor', tipo: S, obrigatorio: true },
+    { id: 'it-9', secao: SEC_GERAL, ordem: 9, descricao: 'Verificar etiqueta externa de status do equipamento (laranja/verde/vermelha)', tipo: S, obrigatorio: true },
+    { id: 'it-10', secao: SEC_GERAL, ordem: 10, descricao: 'Verificar danos no radiador', tipo: S, obrigatorio: true },
+    // 3. PNEUMÁTICO (DESPRESSURIZADO)
+    { id: 'it-11', secao: SEC_PNEU_D, ordem: 11, descricao: 'Verificar certificação da válvula de segurança (PSV)', tipo: C, obrigatorio: true },
+    { id: 'it-12', secao: SEC_PNEU_D, ordem: 12, descricao: 'Verificar certificação do manômetro', tipo: C, obrigatorio: true },
+    { id: 'it-13', secao: SEC_PNEU_D, ordem: 13, descricao: 'Verificar certificação NR13 dos reservatórios de ar', tipo: C, obrigatorio: true },
+    { id: 'it-14', secao: SEC_PNEU_D, ordem: 14, descricao: 'Inspecionar filtros coalescentes, confirmar sequência FEP, FEO, FEOA', tipo: S, obrigatorio: true },
+    { id: 'it-15', secao: SEC_PNEU_D, ordem: 15, descricao: 'Inspecionar rolamento (graxa dos mancais) e correias do ventilador', tipo: S, obrigatorio: true },
+    { id: 'it-16', secao: SEC_PNEU_D, ordem: 16, descricao: 'Observações (Sistema Pneumático Despressurizado)', tipo: T, obrigatorio: false },
+    // 4. ELÉTRICO
+    { id: 'it-17', secao: SEC_ELE, ordem: 17, descricao: 'Abrir o painel e verificar reaperto de todos os componentes', tipo: S, obrigatorio: true },
+    { id: 'it-18', secao: SEC_ELE, ordem: 18, descricao: 'Verificar cabos e prensa cabos na entrada do painel elétrico, motor e luminária (em caso de danos substituir)', tipo: S, obrigatorio: true },
+    { id: 'it-19', secao: SEC_ELE, ordem: 19, descricao: 'Verificar funcionamento do sistema 440 VCA e megar motor', tipo: S, obrigatorio: true },
+    { id: 'it-20', secao: SEC_ELE, ordem: 20, descricao: 'Amperagem do motor elétrico - Fase R (em funcionamento)', tipo: M, unidade: 'A', obrigatorio: false },
+    { id: 'it-21', secao: SEC_ELE, ordem: 21, descricao: 'Amperagem do motor elétrico - Fase S (em funcionamento)', tipo: M, unidade: 'A', obrigatorio: false },
+    { id: 'it-22', secao: SEC_ELE, ordem: 22, descricao: 'Amperagem do motor elétrico - Fase T (em funcionamento)', tipo: M, unidade: 'A', obrigatorio: false },
+    { id: 'it-23', secao: SEC_ELE, ordem: 23, descricao: 'Verificar funcionamento da iluminação', tipo: S, obrigatorio: true },
+    { id: 'it-24', secao: SEC_ELE, ordem: 24, descricao: 'Observações (Sistema Elétrico)', tipo: T, obrigatorio: false },
+    // 5. PNEUMÁTICO (PRESSURIZADO)
+    { id: 'it-25', secao: SEC_PNEU_P, ordem: 25, descricao: 'Verificar se a válvula de controle de pressão (PRV) está regulada para 10 bar e testar estanqueidade', tipo: S, obrigatorio: true },
+    { id: 'it-26', secao: SEC_PNEU_P, ordem: 26, descricao: 'Verificar se as válvulas manuais do manifold de entrada de ar comprimido estão funcionando corretamente e se os Hammer Connection estão íntegros e com anéis internos de vedação', tipo: S, obrigatorio: true },
+    { id: 'it-27', secao: SEC_PNEU_P, ordem: 27, descricao: 'Drenar água dos reservatórios de ar e drenos, verificar mangotes e se as válvulas estão operando normalmente', tipo: S, obrigatorio: true },
+    { id: 'it-28', secao: SEC_PNEU_P, ordem: 28, descricao: 'Verificar se existem vazamentos nos flanges e tubulações', tipo: S, obrigatorio: true },
+    { id: 'it-29', secao: SEC_PNEU_P, ordem: 29, descricao: 'Verificar se existem vazamentos na colmeia do radiador', tipo: S, obrigatorio: true },
+    // 6. TESTE OPERACIONAL (medições + observação)
+    { id: 'it-30', secao: SEC_TESTE, ordem: 30, descricao: 'Temperatura no manifold de ENTRADA de ar comprimido', tipo: M, unidade: '°C', obrigatorio: false },
+    { id: 'it-31', secao: SEC_TESTE, ordem: 31, descricao: 'Temperatura no manifold de SAÍDA de ar comprimido', tipo: M, unidade: '°C', obrigatorio: false },
+    { id: 'it-32', secao: SEC_TESTE, ordem: 32, descricao: 'Observações (Teste Operacional / Troca de Temperatura no Sistema Dinâmico)', tipo: T, obrigatorio: false },
   ];
   for (const it of itens) {
-    await prisma.itemChecklist.create({ data: it });
+    await prisma.itemChecklist.create({ data: { ...it, modeloId: 'mod-1' } });
   }
 
   console.log('Seeding Materiais...');

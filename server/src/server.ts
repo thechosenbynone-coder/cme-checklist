@@ -100,9 +100,11 @@ const loginSchema = z.object({
 const respostaSchema = z.object({
   id: z.string().optional(),
   itemId: z.string(),
-  status: z.enum(['OK', 'PENDENTE', 'NAO_APLICAVEL']),
+  status: z.enum(['OK', 'PENDENTE', 'NAO_APLICAVEL']).nullish(), // MEDICAO/TEXTO não têm status
   observacao: z.string().nullish(),
   responsavel: z.string().nullish(),
+  valorNumerico: z.number().nullish(),
+  valorTexto: z.string().nullish(),
   createdById: z.string().nullish(),
   fotoUrl: z.string().nullish(),
   fotoResolvidaUrl: z.string().nullish(),
@@ -123,6 +125,8 @@ const inspecaoSchema = z.object({
   equipamentoId: z.string().min(1),
   tipo: z.enum(['PRE_EMBARQUE', 'OPERACIONAL', 'RETORNO_EMBARQUE']),
   data: z.string().nullish(),
+  modeloId: z.string().nullish(),
+  modeloVersao: z.number().nullish(),
   responsavelGeral: z.string().nullish(),
   localizacao: z.string().nullish(),
   status: z.enum(['EM_ANDAMENTO', 'CONCLUIDA', 'VALIDADA', 'CANCELADA']),
@@ -137,6 +141,21 @@ const inspecaoSchema = z.object({
   classificacao: z.string().nullish(),
   respostas: z.array(respostaSchema).default([]),
   materiais: z.array(materialSchema).default([]),
+});
+
+const modeloItemSchema = z.object({
+  secao: z.string().min(1),
+  descricao: z.string().min(1),
+  ordem: z.number(),
+  obrigatorio: z.boolean().default(true),
+  tipo: z.enum(['STATUS', 'CERTIFICADO', 'MEDICAO', 'TEXTO']).default('STATUS'),
+  unidade: z.string().nullish(),
+});
+
+const modeloSchema = z.object({
+  nome: z.string().min(1),
+  tipoEquipamento: z.string().min(1),
+  itens: z.array(modeloItemSchema).min(1, 'O modelo precisa de ao menos um item.'),
 });
 
 // ── Rotas públicas ─────────────────────────────────────────────────
@@ -297,7 +316,21 @@ app.get('/api/equipamentos/:id', async (req, res) => {
   }
 });
 
-// GET /api/modelos/tipo/:tipo
+// GET /api/modelos — lista todos os templates (todas as versões) p/ o builder
+app.get('/api/modelos', async (_req, res) => {
+  try {
+    const data = await prisma.checklistModelo.findMany({
+      orderBy: [{ tipoEquipamento: 'asc' }, { versao: 'desc' }],
+      include: { _count: { select: { itens: true, inspecoes: true } } },
+    });
+    res.json(data);
+  } catch (error: any) {
+    console.error('Error listing models:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// GET /api/modelos/tipo/:tipo — versão ativa de um tipo (usada na execução)
 app.get('/api/modelos/tipo/:tipo', async (req, res) => {
   try {
     const { tipo } = req.params;
@@ -308,6 +341,68 @@ app.get('/api/modelos/tipo/:tipo', async (req, res) => {
     res.json(data);
   } catch (error: any) {
     console.error('Error fetching models:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// GET /api/modelos/:id — template completo (com itens)
+app.get('/api/modelos/:id', async (req, res) => {
+  try {
+    const data = await prisma.checklistModelo.findUnique({
+      where: { id: req.params.id },
+      include: { itens: { orderBy: { ordem: 'asc' } } },
+    });
+    if (!data) return res.status(404).json({ error: 'Modelo não encontrado.' });
+    res.json(data);
+  } catch (error: any) {
+    console.error('Error fetching model:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// POST /api/modelos — cria nova versão do template (ISO 9001). Só Gestor/Admin.
+// Editar = nova versão: desativa a ativa do tipo e cria uma nova com versao+1.
+app.post('/api/modelos', requireRole('GESTOR', 'ADMIN'), async (req, res) => {
+  try {
+    const parsed = modeloSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Modelo inválido.' });
+    }
+    const { nome, tipoEquipamento, itens } = parsed.data;
+
+    const novo = await prisma.$transaction(async (tx) => {
+      const ativa = await tx.checklistModelo.findFirst({
+        where: { tipoEquipamento, ativo: true },
+        orderBy: { versao: 'desc' },
+      });
+      const novaVersao = (ativa?.versao ?? 0) + 1;
+      if (ativa) {
+        await tx.checklistModelo.update({ where: { id: ativa.id }, data: { ativo: false } });
+      }
+      return tx.checklistModelo.create({
+        data: {
+          nome,
+          tipoEquipamento,
+          versao: novaVersao,
+          ativo: true,
+          itens: {
+            create: itens.map((it, idx) => ({
+              secao: it.secao,
+              descricao: it.descricao,
+              ordem: it.ordem ?? idx + 1,
+              obrigatorio: it.obrigatorio,
+              tipo: it.tipo,
+              unidade: it.unidade || null,
+            })),
+          },
+        },
+        include: { itens: { orderBy: { ordem: 'asc' } } },
+      });
+    });
+
+    res.json(novo);
+  } catch (error: any) {
+    console.error('Error creating model version:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
@@ -395,6 +490,8 @@ app.post('/api/inspecoes', async (req, res) => {
           equipamentoId: rest.equipamentoId,
           tipo: rest.tipo,
           data: rest.data ? new Date(rest.data) : new Date(),
+          modeloId: rest.modeloId || null,
+          modeloVersao: rest.modeloVersao ?? null,
           responsavelGeral: rest.responsavelGeral,
           localizacao: rest.localizacao,
           status: rest.status,
@@ -415,9 +512,11 @@ app.post('/api/inspecoes', async (req, res) => {
             id: r.id,
             inspecaoId: createdInspecao.id,
             itemId: r.itemId,
-            status: r.status,
+            status: r.status ?? null,
             observacao: r.observacao || null,
             responsavel: r.responsavel || null,
+            valorNumerico: r.valorNumerico ?? null,
+            valorTexto: r.valorTexto || null,
             createdById: r.createdById || null,
             fotoUrl: r.fotoUrl || null,
             fotoResolvidaUrl: r.fotoResolvidaUrl || null,

@@ -69,8 +69,14 @@ const api = {
       request<Equipamento>(`/equipamentos/${encodeURIComponent(id)}`),
   },
   modelos: {
+    list: (): Promise<ChecklistModelo[]> => request<ChecklistModelo[]>('/modelos'),
+    get: (id: string): Promise<ChecklistModelo> =>
+      request<ChecklistModelo>(`/modelos/${encodeURIComponent(id)}`),
     getPorTipo: (tipo: string): Promise<ChecklistModelo | undefined> =>
       request<ChecklistModelo>(`/modelos/tipo/${encodeURIComponent(tipo)}`),
+    // Salvar = cria nova versão (ISO 9001).
+    save: (modelo: { nome: string; tipoEquipamento: string; itens: any[] }): Promise<ChecklistModelo> =>
+      request<ChecklistModelo>('/modelos', { method: 'POST', body: JSON.stringify(modelo) }),
   },
   materiais: {
     list: (): Promise<Material[]> => request<Material[]>('/materiais'),

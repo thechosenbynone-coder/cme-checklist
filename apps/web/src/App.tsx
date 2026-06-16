@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Equipamentos from './pages/Equipamentos';
+import Configuracoes from './pages/Configuracoes';
 import InspecaoDetalhes from './pages/InspecaoDetalhes';
 import { Sidebar } from './components/Sidebar';
 import api from './services/api';
@@ -45,6 +46,15 @@ export const App: React.FC = () => {
           element={
             <ProtectedRoute>
               <Equipamentos />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/configuracoes"
+          element={
+            <ProtectedRoute>
+              <Configuracoes />
             </ProtectedRoute>
           }
         />

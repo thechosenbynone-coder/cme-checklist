@@ -39,7 +39,7 @@ export const Sidebar: React.FC = () => {
     { path: '/', label: 'Dashboard', icon: LayoutDashboard, enabled: true },
     { path: '/equipamentos', label: 'Equipamentos', icon: Wrench, enabled: true },
     { path: '/materiais', label: 'Materiais (Em breve)', icon: FileSpreadsheet, enabled: false },
-    { path: '/configuracoes', label: 'Configurações', icon: Settings, enabled: false }
+    { path: '/configuracoes', label: 'Configurações', icon: Settings, enabled: true }
   ];
 
   return (
