@@ -3,8 +3,16 @@ import { Inspecao, Equipamento, Material, ChecklistModelo, User } from '@cme/typ
 const TOKEN_KEY = 'cme_token';
 const USER_KEY = 'cme_current_user';
 
+const getBaseUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    const saved = window.localStorage.getItem('cme_api_url');
+    if (saved) return saved.replace(/\/$/, '');
+  }
+  return (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+};
+
 const getApiUrl = (path: string) => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+  const baseUrl = getBaseUrl();
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   return `${baseUrl}/api${cleanPath}`;
 };
@@ -80,7 +88,7 @@ const api = {
   },
   auth: {
     login: async (identifier: string, senha: string): Promise<User> => {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+      const baseUrl = getBaseUrl();
       const response = await fetch(`${baseUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -117,7 +125,7 @@ const api = {
     file: async (file: File | Blob, filename: string): Promise<string> => {
       const formData = new FormData();
       formData.append('file', file, filename);
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+      const baseUrl = getBaseUrl();
       const token = getToken();
       const response = await fetch(`${baseUrl}/api/upload`, {
         method: 'POST',
@@ -134,10 +142,23 @@ const api = {
     if (!url) return url;
     if (url.startsWith('/api/files/')) {
       const token = getToken();
-      const base = import.meta.env.VITE_API_BASE_URL || '';
+      const base = getBaseUrl();
       return `${base}${url}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
     }
     return url;
+  },
+  config: {
+    getBaseUrl,
+    setBaseUrl: (url: string): void => {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('cme_api_url', url);
+      }
+    },
+    clearBaseUrl: (): void => {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('cme_api_url');
+      }
+    },
   },
 };
 
