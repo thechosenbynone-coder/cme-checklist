@@ -125,6 +125,7 @@ const inspecaoSchema = z.object({
   equipamentoId: z.string().min(1),
   tipo: z.enum(['PRE_EMBARQUE', 'OPERACIONAL', 'RETORNO_EMBARQUE']),
   data: z.string().nullish(),
+  numeroDocumento: z.string().nullish(),
   modeloId: z.string().nullish(),
   modeloVersao: z.number().nullish(),
   responsavelGeral: z.string().nullish(),
@@ -484,12 +485,17 @@ app.post('/api/inspecoes', async (req, res) => {
     const { respostas, materiais, ...rest } = parsed.data;
 
     const result = await prisma.$transaction(async (tx) => {
+      const numeroDocumento =
+        rest.numeroDocumento ||
+        `OPE-PC-03/${new Date().toISOString().slice(0, 10).replace(/-/g, '')}/${(rest.id || `${Date.now()}`).slice(-6).toUpperCase()}`;
+
       const createdInspecao = await tx.inspecao.create({
         data: {
           id: rest.id,
           equipamentoId: rest.equipamentoId,
           tipo: rest.tipo,
           data: rest.data ? new Date(rest.data) : new Date(),
+          numeroDocumento,
           modeloId: rest.modeloId || null,
           modeloVersao: rest.modeloVersao ?? null,
           responsavelGeral: rest.responsavelGeral,
@@ -545,6 +551,55 @@ app.post('/api/inspecoes', async (req, res) => {
     res.json(result);
   } catch (error: any) {
     console.error('Error creating inspection:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// PATCH /api/inspecoes/:id/validar — Gestor/Admin valida e libera o equipamento (ISO 9001)
+app.patch('/api/inspecoes/:id/validar', requireRole('GESTOR', 'ADMIN'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const inspecao = await prisma.inspecao.findUnique({ where: { id } });
+    if (!inspecao) return res.status(404).json({ error: 'Inspeção não encontrada.' });
+    if (inspecao.status === 'VALIDADA') {
+      return res.status(409).json({ error: 'Inspeção já validada.' });
+    }
+
+    const atualizada = await prisma.$transaction(async (tx) => {
+      const insp = await tx.inspecao.update({
+        where: { id },
+        data: {
+          status: 'VALIDADA',
+          validadaPorId: req.user?.sub || null,
+          validadaEm: new Date(),
+        },
+      });
+
+      // Recalcula e persiste o status de liberação do equipamento.
+      const eq = await tx.equipamento.findUnique({
+        where: { id: insp.equipamentoId },
+        include: { inspecoes: { include: { respostas: true } } },
+      });
+      if (eq) {
+        await tx.equipamento.update({
+          where: { id: eq.id },
+          data: { statusLiberacao: calcularStatusLiberacao(eq) },
+        });
+      }
+      return insp;
+    });
+
+    const completa = await prisma.inspecao.findUnique({
+      where: { id: atualizada.id },
+      include: {
+        equipamento: true,
+        respostas: { include: { item: true } },
+        materiais: { include: { material: true } },
+      },
+    });
+    res.json(completa);
+  } catch (error: any) {
+    console.error('Error validating inspection:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });

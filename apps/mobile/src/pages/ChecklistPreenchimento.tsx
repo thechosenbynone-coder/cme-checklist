@@ -3,7 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, AlertTriangle, HelpCircle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Camera } from 'lucide-react';
 import { Card, Button } from '@cme/ui';
 import api from '../services/api';
-import { Equipamento, ChecklistModelo, Material, Inspecao, RespostaItem, MaterialUtilizado, StatusItem } from '@cme/types';
+import { Equipamento, ChecklistModelo, Material, Inspecao, RespostaItem, MaterialUtilizado, StatusItem, maiusculas } from '@cme/types';
+
+// Formata ISO (YYYY-MM-DD...) para DD/MM/AAAA
+const fmtBR = (iso?: string | null): string => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
+};
 
 export const ChecklistPreenchimento: React.FC = () => {
   const navigate = useNavigate();
@@ -43,6 +50,9 @@ export const ChecklistPreenchimento: React.FC = () => {
   
   // Observações gerais da inspeção
   const [observacoesGerais, setObservacoesGerais] = useState('');
+
+  // Certificados pré-preenchidos do equipamento com validade vencida (alerta)
+  const [certVencido, setCertVencido] = useState<Record<string, boolean>>({});
 
   // Canvas Signature ref
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -126,34 +136,50 @@ export const ChecklistPreenchimento: React.FC = () => {
     const meta = JSON.parse(metaRaw);
     setMetadata(meta);
 
-    // 2. Carregar Equipamento
-    api.equipamentos.list().then(eqs => {
-      const eq = eqs.find(e => e.id === meta.equipamentoId);
+    // 2. Carregar Equipamento (com certificados, para pré-preenchimento)
+    api.equipamentos.get(meta.equipamentoId).then(eq => {
       if (eq) {
         setEquipamento(eq);
+        const certs = eq.certificados || [];
+        const certEslinga = certs.find(c => (c.tipo || '').toUpperCase() === 'ESLINGA');
+        const certEquip = certs.find(c => (c.tipo || '').toUpperCase() === 'EQUIPAMENTO');
+        const agora = new Date();
+
         // 3. Carregar Modelo correspondente
         api.modelos.getPorTipo(eq.tipo).then(mod => {
           if (mod) {
             setModelo(mod);
-            // Inicializar respostas em branco
             const initialRespostas: typeof respostas = {};
-              mod.itens?.forEach(item => {
-                initialRespostas[item.id] = {
-                  status: undefined,
-                  observacao: '',
-                  responsavel: '',
-                  valorNumerico: undefined,
-                  valorTexto: '',
-                  certificadoId: '',
-                  certificadoValidade: '',
-                  fotoBase64: undefined,
-                  fotoUrl: undefined,
-                  pendenciaResolvida: undefined,
-                  fotoResolvidaBase64: undefined,
-                  fotoResolvidaUrl: undefined
-                };
-              });
+            const vencidos: Record<string, boolean> = {};
+            mod.itens?.forEach(item => {
+              let certId = '';
+              let certValidade = '';
+              if (item.tipo === 'CERTIFICADO') {
+                // Lingada usa o certificado da eslinga; demais usam o certificado do equipamento.
+                const cert = /LINGADA/i.test(item.descricao) ? certEslinga : certEquip;
+                if (cert) {
+                  certId = cert.numero || '';
+                  certValidade = fmtBR(cert.validade);
+                  if (cert.validade && new Date(cert.validade) < agora) vencidos[item.id] = true;
+                }
+              }
+              initialRespostas[item.id] = {
+                status: undefined,
+                observacao: '',
+                responsavel: '',
+                valorNumerico: undefined,
+                valorTexto: '',
+                certificadoId: certId,
+                certificadoValidade: certValidade,
+                fotoBase64: undefined,
+                fotoUrl: undefined,
+                pendenciaResolvida: undefined,
+                fotoResolvidaBase64: undefined,
+                fotoResolvidaUrl: undefined
+              };
+            });
             setRespostas(initialRespostas);
+            setCertVencido(vencidos);
           }
         });
       }
@@ -359,11 +385,11 @@ export const ChecklistPreenchimento: React.FC = () => {
       inspecaoId,
       itemId,
       status: value.status,
-      observacao: value.observacao || undefined,
-      responsavel: value.responsavel || undefined,
+      observacao: maiusculas(value.observacao),
+      responsavel: maiusculas(value.responsavel),
       valorNumerico: value.valorNumerico,
-      valorTexto: value.valorTexto || undefined,
-      certificadoId: value.certificadoId || undefined,
+      valorTexto: maiusculas(value.valorTexto),
+      certificadoId: maiusculas(value.certificadoId),
       certificadoValidade: value.certificadoValidade || undefined,
       fotoUrl: value.fotoUrl || undefined,
       pendenciaResolvida: value.pendenciaResolvida !== undefined ? value.pendenciaResolvida : undefined,
@@ -389,7 +415,7 @@ export const ChecklistPreenchimento: React.FC = () => {
       responsavelGeral: metadata.responsavelGeral,
       localizacao: metadata.localizacao,
       status: 'CONCLUIDA',
-      observacoesGerais: observacoesGerais || undefined,
+      observacoesGerais: maiusculas(observacoesGerais),
       assinaturaUrl: assinaturaUrl || undefined,
       respostas: finalRespostas,
       materiais: finalMateriais,
@@ -511,8 +537,9 @@ export const ChecklistPreenchimento: React.FC = () => {
           alert(`Por favor, indique se a pendência do item "${item.descricao}" foi resolvida.`);
           return;
         }
-        if (resp.pendenciaResolvida && !resp.fotoResolvidaUrl) {
-          alert(`Por favor, anexe a foto ou vídeo de evidência para a pendência resolvida do item "${item.descricao}".`);
+        // Toda pendência exige evidência (foto/vídeo), resolvida ou não.
+        if (!resp.fotoResolvidaUrl) {
+          alert(`Anexe a evidência (foto/vídeo) da pendência do item "${item.descricao}".`);
           return;
         }
       }
@@ -592,6 +619,13 @@ export const ChecklistPreenchimento: React.FC = () => {
             {isCert && (
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-4 text-left">
                 <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Informações de Certificação</span>
+                {certVencido[item.id] && (
+                  <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold px-2.5 py-1.5 rounded-lg">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Certificado do equipamento VENCIDO — verifique antes de liberar.
+                  </div>
+                )}
+                <span className="block text-[9px] text-slate-400">Pré-preenchido do cadastro do equipamento (editável).</span>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[8px] font-bold text-slate-500 mb-1">ID do Certificado</label>
@@ -907,9 +941,12 @@ export const ChecklistPreenchimento: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Camera upload if resolved is YES */}
-                    {resp.pendenciaResolvida === true && (
+                    {/* Evidência obrigatória para toda pendência (resolvida ou não) */}
+                    {resp.pendenciaResolvida !== undefined && (
                       <div className="flex flex-col items-center justify-center p-3 bg-slate-50 border border-dashed border-slate-250 rounded-xl">
+                        <span className="text-[10px] font-bold text-slate-500 mb-2 w-full text-left">
+                          Evidência (foto/vídeo) <span className="text-red-500">*</span>
+                        </span>
                         {resp.fotoResolvidaUrl ? (
                           <div className="relative inline-block">
                             {resp.fotoResolvidaUrl.includes('video-') || resp.fotoResolvidaUrl.endsWith('.webm') || resp.fotoResolvidaUrl.startsWith('data:video/') ? (

@@ -41,6 +41,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   inspecoesCriadas     Inspecao[] @relation("InspecaoCriadaPor")
+  inspecoesValidadas   Inspecao[] @relation("InspecaoValidadaPor")
   respostasRegistradas RespostaItem[] @relation("RespostaRegistradaPor")
 }
 
@@ -120,6 +121,7 @@ model Inspecao {
   equipamentoId String
   tipo          TipoInspecao
   data          DateTime @default(now())
+  numeroDocumento String? @unique // registro único rastreável (ISO 9001)
   modeloId      String?  // versão do template usada (ISO 9001 — rastreabilidade)
   modeloVersao  Int?
   responsavelGeral String?  // Nome do responsável principal
@@ -127,6 +129,8 @@ model Inspecao {
   status        StatusInspecao @default(EM_ANDAMENTO)
   observacoesGerais String?
   createdById   String?
+  validadaPorId String?
+  validadaEm    DateTime?
   assinaturaUrl   String?   // URL do Drive (substitui assinaturaBase64)
   fotosUrls       String[]  // Array de URLs do Drive (substitui fotosEquipamento)
   origem          String?
@@ -137,6 +141,7 @@ model Inspecao {
   equipamento Equipamento @relation(fields: [equipamentoId], references: [id])
   modelo      ChecklistModelo? @relation(fields: [modeloId], references: [id])
   createdBy   User?       @relation("InspecaoCriadaPor", fields: [createdById], references: [id])
+  validadaPor User?       @relation("InspecaoValidadaPor", fields: [validadaPorId], references: [id])
   respostas   RespostaItem[]
   materiais   MaterialUtilizado[]
 

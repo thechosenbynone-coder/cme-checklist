@@ -1,52 +1,74 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowRight, MapPin, User, Settings2, ShieldCheck, MapPinIcon } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowRight, MapPin, User, Settings2, ShieldCheck, MapPinIcon, Search, Check } from 'lucide-react';
 import { Card, Button } from '@cme/ui';
 import api from '../services/api';
-import { Equipamento, TipoInspecao } from '@cme/types';
+import { Equipamento, TipoInspecao, maiusculas } from '@cme/types';
 
 export const EquipamentoSelecao: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
+  const [busca, setBusca] = useState('');
+  const [autoSelectCodigo, setAutoSelectCodigo] = useState<string | null>(null);
   const [selectedEqId, setSelectedEqId] = useState('');
   const [tipoInspecao, setTipoInspecao] = useState<TipoInspecao>('PRE_EMBARQUE');
   const [responsavel, setResponsavel] = useState('');
   const [localizacao, setLocalizacao] = useState('');
   const [compressorUtilizado, setCompressorUtilizado] = useState('');
   const [classificacao, setClassificacao] = useState<'NIVEL_1' | 'NIVEL_2' | 'REBUILD'>('NIVEL_1');
-  
+
   // New fields requested by user
   const [origem, setOrigem] = useState('');
   const [destino, setDestino] = useState('');
 
+  // Responsável logado + pré-seleção via ?equip= (gerar checklist 1-clique)
   useEffect(() => {
-    api.equipamentos.list().then(data => {
-      setEquipamentos(data);
-      if (data.length > 0) {
-        setSelectedEqId(data[0].id);
-      }
-    });
-
     const user = api.auth.currentUser();
-    if (user) {
-      setResponsavel(user.nome);
+    if (user) setResponsavel(user.nome);
+    const equipParam = searchParams.get('equip');
+    if (equipParam) {
+      setAutoSelectCodigo(equipParam);
+      setBusca(equipParam);
     }
-  }, []);
+  }, [searchParams]);
+
+  // Busca inteligente (server-side) com debounce
+  useEffect(() => {
+    const t = setTimeout(() => {
+      api.equipamentos.list(busca.trim() || undefined).then((data) => {
+        setEquipamentos(data);
+        if (autoSelectCodigo) {
+          const found = data.find(
+            (e) => e.codigo === autoSelectCodigo || e.codigoExibicao === autoSelectCodigo
+          );
+          if (found) setSelectedEqId(found.id);
+          setAutoSelectCodigo(null);
+        }
+      });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [busca]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectedEq = equipamentos.find((e) => e.id === selectedEqId);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEqId) return;
+    if (!selectedEqId) {
+      alert('Selecione um equipamento para iniciar.');
+      return;
+    }
 
-    // Salvar metadados iniciais temporários na sessão para a próxima página
+    // Metadados na sessão (texto livre normalizado em MAIÚSCULAS)
     const metadata = {
       equipamentoId: selectedEqId,
       tipo: tipoInspecao,
-      responsavelGeral: responsavel,
-      localizacao,
-      compressorUtilizado,
+      responsavelGeral: maiusculas(responsavel),
+      localizacao: maiusculas(localizacao),
+      compressorUtilizado: maiusculas(compressorUtilizado),
       classificacao,
-      origem,
-      destino
+      origem: maiusculas(origem),
+      destino: maiusculas(destino),
     };
     window.sessionStorage.setItem('cme_nova_inspecao_meta', JSON.stringify(metadata));
     navigate('/checklist');
@@ -70,20 +92,52 @@ export const EquipamentoSelecao: React.FC = () => {
         
         {/* Equipamento */}
         <Card title="1. Equipamento">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Selecionar Equipamento</label>
-              <select
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-800 outline-none focus:ring-2 focus:ring-blue-200"
-                value={selectedEqId}
-                onChange={(e) => setSelectedEqId(e.target.value)}
-              >
-                {equipamentos.map(eq => (
-                  <option key={eq.id} value={eq.id}>
-                    {eq.codigo} - {eq.nome} ({eq.status})
-                  </option>
-                ))}
-              </select>
+          <div className="space-y-3">
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-slate-400" />
+              </span>
+              <input
+                type="text"
+                inputMode="search"
+                placeholder="Buscar: CME-AFTE.001, afte 001, compressor..."
+                className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
+            </div>
+
+            {selectedEq && (
+              <div className="text-[11px] bg-[#0b132b] text-white rounded-xl px-3 py-2 flex items-center justify-between">
+                <span className="font-bold truncate">{selectedEq.codigoExibicao || selectedEq.codigo}</span>
+                <span className="text-[#38bdf8] font-bold uppercase text-[9px]">{selectedEq.tipo}</span>
+              </div>
+            )}
+
+            <div className="max-h-56 overflow-y-auto space-y-1.5 -mr-1 pr-1">
+              {equipamentos.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-4">Nenhum equipamento encontrado.</p>
+              ) : (
+                equipamentos.map((eq) => {
+                  const sel = eq.id === selectedEqId;
+                  return (
+                    <button
+                      key={eq.id}
+                      type="button"
+                      onClick={() => setSelectedEqId(eq.id)}
+                      className={`w-full text-left px-3 py-2 rounded-xl border text-xs transition flex items-center justify-between gap-2 ${
+                        sel ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="min-w-0">
+                        <span className="font-bold text-slate-800 block truncate">{eq.codigoExibicao || eq.codigo}</span>
+                        <span className="text-[10px] text-slate-400 block truncate">{eq.tipo} · {eq.localizacaoAtual || '—'}</span>
+                      </span>
+                      {sel && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
         </Card>

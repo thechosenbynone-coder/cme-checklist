@@ -12,6 +12,7 @@ export const InspecaoDetalhes: React.FC = () => {
   const navigate = useNavigate();
   const [inspecao, setInspecao] = useState<Inspecao | null>(null);
   const [userRole, setUserRole] = useState<string>('Operador');
+  const [validando, setValidando] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -44,12 +45,17 @@ export const InspecaoDetalhes: React.FC = () => {
   });
 
   const handleValidate = async () => {
-    const updated: Inspecao = {
-      ...inspecao,
-      status: 'VALIDADA'
-    };
-    await api.inspecoes.save(updated);
-    setInspecao(updated);
+    if (!inspecao) return;
+    setValidando(true);
+    try {
+      const updated = await api.inspecoes.validar(inspecao.id);
+      setInspecao(updated);
+      alert('Inspeção validada! O equipamento foi liberado. ✅');
+    } catch (e: any) {
+      alert(e?.message || 'Erro ao validar a inspeção.');
+    } finally {
+      setValidando(false);
+    }
   };
 
   return (
@@ -83,14 +89,15 @@ export const InspecaoDetalhes: React.FC = () => {
             <span>Exportar Excel</span>
           </Button>
 
-          {inspecao.status !== 'VALIDADA' && userRole === 'Supervisor' && (
+          {inspecao.status !== 'VALIDADA' && ['GESTOR', 'ADMIN'].includes((userRole || '').toUpperCase()) && (
             <Button
               variant="success"
               onClick={handleValidate}
-              className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700"
+              disabled={validando}
+              className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
             >
               <CheckCircle2 className="h-4 w-4" />
-              <span>Validar Inspeção</span>
+              <span>{validando ? 'Validando...' : 'Validar e Liberar'}</span>
             </Button>
           )}
         </div>
@@ -99,7 +106,7 @@ export const InspecaoDetalhes: React.FC = () => {
       {/* Overview Card */}
       <Card 
         title={`Inspeção: ${inspecao.equipamento?.codigo} - ${inspecao.equipamento?.nome}`}
-        subtitle={`Registro ID: ${inspecao.id}`}
+        subtitle={`Documento: ${inspecao.numeroDocumento || inspecao.id}${inspecao.modeloVersao ? ` · Modelo v${inspecao.modeloVersao}` : ''}${inspecao.validadaEm ? ` · Validada em ${new Date(inspecao.validadaEm).toLocaleString('pt-BR')}` : ''}`}
         headerAction={<Badge type={inspecao.status} />}
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">

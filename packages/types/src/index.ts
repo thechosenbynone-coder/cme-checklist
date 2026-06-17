@@ -123,8 +123,11 @@ export interface Inspecao {
   equipamentoId: string;
   tipo: TipoInspecao;
   data: string; // ISO String
+  numeroDocumento?: string; // registro único rastreável (ISO 9001)
   modeloId?: string;     // versão do template usada (ISO 9001 — rastreabilidade)
   modeloVersao?: number;
+  validadaPorId?: string;
+  validadaEm?: string;
   responsavelGeral?: string;
   localizacao?: string;
   status: StatusInspecao;
@@ -143,3 +146,11 @@ export interface Inspecao {
   fotosEquipamento?: string[]; // Três fotos obrigatórias do equipamento
   fotosUrls?: string[]; // URLs do Drive (produção)
 }
+
+// Util central de normalização 
+// Texto livre (responsável, origem, destino, observações, códigos) em MAIÚSCULAS.
+export const maiusculas = (s?: string | null): string | undefined => {
+  if (s == null) return undefined;
+  const t = String(s).trim();
+  return t ? t.toLocaleUpperCase('pt-BR') : undefined;
+};

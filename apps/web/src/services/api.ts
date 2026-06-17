@@ -87,6 +87,9 @@ const api = {
     save: async (inspecao: Inspecao): Promise<void> => {
       await request<void>('/inspecoes', { method: 'POST', body: JSON.stringify(inspecao) });
     },
+    // Concluir -> validar (Gestor): libera o equipamento.
+    validar: (id: string): Promise<Inspecao> =>
+      request<Inspecao>(`/inspecoes/${encodeURIComponent(id)}/validar`, { method: 'PATCH' }),
   },
   auth: {
     login: async (identifier: string, senha: string): Promise<User> => {
