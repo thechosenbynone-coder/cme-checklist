@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, MapPin, User, Settings2, ShieldCheck, MapPinIcon, Search, Check } from 'lucide-react';
 import { Card, Button } from '@cme/ui';
@@ -13,6 +13,18 @@ export const EquipamentoSelecao: React.FC = () => {
   const [autoSelectCodigo, setAutoSelectCodigo] = useState<string | null>(null);
   const [selectedEqId, setSelectedEqId] = useState('');
   const [tipoInspecao, setTipoInspecao] = useState<TipoInspecao>('PRE_EMBARQUE');
+  const [showSearch, setShowSearch] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus input when search mode is active
+  useEffect(() => {
+    if (showSearch || !selectedEqId) {
+      const t = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(t);
+    }
+  }, [showSearch, selectedEqId]);
   const [responsavel, setResponsavel] = useState('');
   const [localizacao, setLocalizacao] = useState('');
   const [compressorUtilizado, setCompressorUtilizado] = useState('');
@@ -89,58 +101,91 @@ export const EquipamentoSelecao: React.FC = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        
         {/* Equipamento */}
         <Card title="1. Equipamento">
           <div className="space-y-3">
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-slate-400" />
-              </span>
-              <input
-                type="text"
-                inputMode="search"
-                placeholder="Buscar: CME-AFTE.001, afte 001, compressor..."
-                className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
-            </div>
-
-            {selectedEq && (
-              <div className="text-[11px] bg-[#0b132b] text-white rounded-xl px-3 py-2 flex items-center justify-between">
-                <span className="font-bold truncate">{selectedEq.codigoExibicao || selectedEq.codigo}</span>
-                <span className="text-[#38bdf8] font-bold uppercase text-[9px]">{selectedEq.tipo}</span>
+            {selectedEq && !showSearch ? (
+              // Estado Selecionado: exibe card limpo e botão "Alterar"
+              <div className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="min-w-0">
+                  <span className="font-bold text-slate-900 block text-sm truncate">
+                    {selectedEq.codigoExibicao || selectedEq.codigo}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold tracking-wider mt-0.5">
+                    {selectedEq.tipo} · {selectedEq.localizacaoAtual || 'Sem localização'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSearch(true);
+                    setBusca(''); // Limpa a busca ao reabrir para mostrar todos
+                  }}
+                  className="px-3 py-1.5 bg-[#0b132b] text-white text-xs font-bold rounded-lg hover:bg-[#1b2a47] active:scale-95 transition whitespace-nowrap"
+                >
+                  Alterar
+                </button>
               </div>
-            )}
-
-            <div className="max-h-56 overflow-y-auto space-y-1.5 -mr-1 pr-1">
-              {equipamentos.length === 0 ? (
-                <p className="text-[11px] text-slate-400 text-center py-4">Nenhum equipamento encontrado.</p>
-              ) : (
-                equipamentos.map((eq) => {
-                  const sel = eq.id === selectedEqId;
-                  return (
+            ) : (
+              // Estado de Busca: exibe input e a lista de resultados
+              <>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-4 w-4 text-slate-400" />
+                  </span>
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    inputMode="search"
+                    placeholder="Buscar: CME-AFTE.001, afte 001, compressor..."
+                    className="w-full pl-9 pr-12 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                  />
+                  {selectedEq && (
                     <button
-                      key={eq.id}
                       type="button"
-                      onClick={() => setSelectedEqId(eq.id)}
-                      className={`w-full text-left px-3 py-2 rounded-xl border text-xs transition flex items-center justify-between gap-2 ${
-                        sel ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200 hover:bg-slate-50'
-                      }`}
+                      onClick={() => setShowSearch(false)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-[10px] font-bold text-slate-400 hover:text-slate-650"
                     >
-                      <span className="min-w-0">
-                        <span className="font-bold text-slate-800 block truncate">{eq.codigoExibicao || eq.codigo}</span>
-                        <span className="text-[10px] text-slate-400 block truncate">{eq.tipo} · {eq.localizacaoAtual || '—'}</span>
-                      </span>
-                      {sel && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                      Cancelar
                     </button>
-                  );
-                })
-              )}
-            </div>
+                  )}
+                </div>
+
+                <div className="max-h-52 overflow-y-auto space-y-1.5 -mr-1 pr-1">
+                  {equipamentos.length === 0 ? (
+                    <p className="text-[11px] text-slate-400 text-center py-4">Nenhum equipamento encontrado.</p>
+                  ) : (
+                    equipamentos.map((eq) => {
+                      const sel = eq.id === selectedEqId;
+                      return (
+                        <button
+                          key={eq.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedEqId(eq.id);
+                            setShowSearch(false);
+                          }}
+                          className={`w-full text-left px-3 py-2.5 rounded-xl border text-xs transition flex items-center justify-between gap-2 ${
+                            sel ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="min-w-0">
+                            <span className="font-bold text-slate-800 block truncate">{eq.codigoExibicao || eq.codigo}</span>
+                            <span className="text-[10px] text-slate-400 block truncate">{eq.tipo} · {eq.localizacaoAtual || '—'}</span>
+                          </span>
+                          {sel && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </Card>
+
 
         {/* Tipo de Inspeção */}
         <Card title="2. Tipo de Inspeção">

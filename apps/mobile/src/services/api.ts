@@ -66,7 +66,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 const api = {
   equipamentos: {
-    list: (): Promise<Equipamento[]> => request<Equipamento[]>('/equipamentos'),
+    list: (busca?: string): Promise<Equipamento[]> =>
+      request<Equipamento[]>(`/equipamentos${busca ? `?busca=${encodeURIComponent(busca)}` : ''}`),
+    get: (id: string): Promise<Equipamento> =>
+      request<Equipamento>(`/equipamentos/${encodeURIComponent(id)}`),
   },
   modelos: {
     getPorTipo: (tipo: string): Promise<ChecklistModelo | undefined> =>
