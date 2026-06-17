@@ -10,6 +10,7 @@
     "cap:build": "cap build"
   },
   "dependencies": {
+    "@capgo/capacitor-updater": "^6.45.10",
     "@cme/types": "*",
     "@cme/ui": "*",
     "jspdf": "^2.5.1",

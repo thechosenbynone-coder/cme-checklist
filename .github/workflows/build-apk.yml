@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build APK
@@ -41,6 +44,11 @@ jobs:
           cd apps/mobile
           npx cap sync android
 
+      - name: Package Web Assets as ZIP
+        run: |
+          cd apps/mobile/dist
+          zip -r ../../../dist.zip .
+
       - name: Build Android Debug APK
         run: |
           cd apps/mobile/android
@@ -54,3 +62,22 @@ jobs:
           path: apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+      - name: Get Version from package.json
+        id: get_version
+        run: |
+          VERSION=$(node -e "console.log(require('./apps/mobile/package.json').version)")
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: Release v${{ steps.get_version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+            dist.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

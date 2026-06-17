@@ -166,6 +166,44 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'cme-checklist-api' });
 });
 
+// GET /api/update/check — check for OTA updates
+app.get('/api/update/check', async (req, res) => {
+  try {
+    const currentVersion = typeof req.query.currentVersion === 'string' ? req.query.currentVersion : '0.0.0';
+
+    const githubUrl = 'https://raw.githubusercontent.com/thechosenbynone-coder/cme-checklist/main/apps/mobile/package.json';
+    const response = await fetch(githubUrl);
+    if (!response.ok) {
+      return res.json({ updateAvailable: false });
+    }
+
+    const pkg = (await response.json()) as { version: string };
+    const latestVersion = pkg.version || '0.0.0';
+
+    const parseVersion = (v: string) => v.split('.').map(Number);
+    const [cMajor, cMinor, cPatch] = parseVersion(currentVersion);
+    const [lMajor, lMinor, lPatch] = parseVersion(latestVersion);
+
+    const updateAvailable =
+      lMajor > cMajor ||
+      (lMajor === cMajor && lMinor > cMinor) ||
+      (lMajor === cMajor && lMinor === cMinor && lPatch > cPatch);
+
+    if (updateAvailable) {
+      return res.json({
+        updateAvailable: true,
+        version: latestVersion,
+        url: `https://github.com/thechosenbynone-coder/cme-checklist/releases/download/v${latestVersion}/dist.zip`
+      });
+    }
+
+    res.json({ updateAvailable: false });
+  } catch (error: any) {
+    console.error('Error checking for updates:', error);
+    res.status(500).json({ error: 'Erro ao verificar atualizações.' });
+  }
+});
+
 // POST /auth/login
 app.post('/auth/login', loginLimiter, async (req, res) => {
   try {
