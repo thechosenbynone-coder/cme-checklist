@@ -2,33 +2,103 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── CME Design Tokens ─────────────────────────────────────────────── */
+
+:root {
+  /* LIGHT theme */
+  --bg:          247 249 252;
+  --surface:     255 255 255;
+  --surface-2:   238 242 247;
+  --border:      226 232 240;
+  --text:        45 45 45;
+  --muted:       91 107 123;
+  --accent:      29 98 173;
+  --accent-text: 29 98 173;
+  --primary:     8 53 94;
+}
+
+.dark {
+  /* DARK theme */
+  --bg:          45 45 45;
+  --surface:     56 56 56;
+  --surface-2:   66 66 66;
+  --border:      74 74 74;
+  --text:        255 255 255;
+  --muted:       183 183 183;
+  --accent:      29 98 173;
+  --accent-text: 92 156 230;
+  --primary:     8 53 94;
+}
+
+/* ── Base Reset ────────────────────────────────────────────────────── */
+
+html, body, #root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  @apply bg-slate-50 text-slate-900;
+  background: rgb(var(--bg));
+  color: rgb(var(--text));
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Permitir seleção em inputs e observações */
+/* Allow text selection on form fields */
 input, textarea, select {
   user-select: text;
 }
 
+/* ── Safe Area Utilities ───────────────────────────────────────────── */
+
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ── Scrollbar Utilities ───────────────────────────────────────────── */
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+/* ── Reduced Motion ────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ── Simple Animations (CSS fallbacks) ─────────────────────────────── */
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideDown {
   from { opacity: 0; transform: scaleY(0.95); transform-origin: top; }
-  to { opacity: 1; transform: scaleY(1); transform-origin: top; }
+  to   { opacity: 1; transform: scaleY(1); transform-origin: top; }
 }
 
 .animate-fadeIn {
-  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-slideDown {
-  animation: slideDown 0.2s ease-out forwards;
+  animation: slideDown 0.18s ease-out forwards;
 }

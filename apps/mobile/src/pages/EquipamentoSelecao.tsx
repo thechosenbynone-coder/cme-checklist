@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, MapPin, User, Settings2, ShieldCheck, MapPinIcon, Search, Check } from 'lucide-react';
-import { Card, Button } from '@cme/ui';
+import { Card } from '../components/ui/Card';
+import { Input } from '../components/ui/Input';
+import { AppHeader } from '../components/ui/AppHeader';
+import { cn } from '../lib/cn';
+import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
 import { Equipamento, TipoInspecao, maiusculas } from '@cme/types';
 
@@ -87,241 +91,247 @@ export const EquipamentoSelecao: React.FC = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto px-4 py-8 space-y-6">
-      <div className="text-center">
-        <div className="mx-auto h-12 w-12 rounded-xl bg-[#0b132b] text-[#38bdf8] grid place-items-center mb-3 shadow-md shadow-blue-900/10">
-          <ShieldCheck className="h-7 w-7" />
-        </div>
-        <h1 className="text-lg font-bold text-slate-900 leading-tight uppercase tracking-tight">
-          CHECK LIST OPERACIONAL DE LIBERAÇÃO DE EQUIPAMENTO
-        </h1>
-        <p className="text-slate-500 text-[10px] mt-1.5 uppercase font-bold tracking-wider">
-          Inspeção Operacional de After Cooler
-        </p>
-      </div>
+    <div className="min-h-[100dvh] bg-bg text-content flex flex-col">
+      <AppHeader title="CHECK LIST OPERACIONAL" subtitle="Inspeção de After Cooler" />
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Equipamento */}
-        <Card title="1. Equipamento">
-          <div className="space-y-3">
-            {selectedEq && !showSearch ? (
-              // Estado Selecionado: exibe card limpo e botão "Alterar"
-              <div className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <div className="min-w-0">
-                  <span className="font-bold text-slate-900 block text-sm truncate">
-                    {selectedEq.codigoExibicao || selectedEq.codigo}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold tracking-wider mt-0.5">
-                    {selectedEq.tipo} · {selectedEq.localizacaoAtual || 'Sem localização'}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSearch(true);
-                    setBusca(''); // Limpa a busca ao reabrir para mostrar todos
-                  }}
-                  className="px-3 py-1.5 bg-[#0b132b] text-white text-xs font-bold rounded-lg hover:bg-[#1b2a47] active:scale-95 transition whitespace-nowrap"
-                >
-                  Alterar
-                </button>
-              </div>
-            ) : (
-              // Estado de Busca: exibe input e a lista de resultados
-              <>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search className="h-4 w-4 text-slate-400" />
-                  </span>
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    inputMode="search"
-                    placeholder="Buscar: CME-AFTE.001, afte 001, compressor..."
-                    className="w-full pl-9 pr-12 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                    value={busca}
-                    onChange={(e) => setBusca(e.target.value)}
-                  />
-                  {selectedEq && (
+      <div className="flex-1 overflow-y-auto no-scrollbar">
+        <div className="max-w-md mx-auto px-4 py-6 space-y-5 safe-bottom">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Equipamento */}
+            <Card title="1. Equipamento">
+              <div className="space-y-3">
+                {selectedEq && !showSearch ? (
+                  // Estado Selecionado: exibe card limpo e botão "Alterar"
+                  <div className="bg-accent/10 border border-accent rounded-xl p-3 flex items-center justify-between">
+                    <div className="min-w-0">
+                      <span className="font-bold text-content block text-sm truncate">
+                        {selectedEq.codigoExibicao || selectedEq.codigo}
+                      </span>
+                      <span className="text-[10px] text-muted block uppercase font-bold tracking-wider mt-0.5">
+                        {selectedEq.tipo} · {selectedEq.localizacaoAtual || 'Sem localização'}
+                      </span>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setShowSearch(false)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-[10px] font-bold text-slate-400 hover:text-slate-650"
+                      onClick={() => {
+                        setShowSearch(true);
+                        setBusca(''); // Limpa a busca ao reabrir para mostrar todos
+                      }}
+                      className="px-3 py-1.5 bg-accent text-white text-xs font-bold rounded-lg active:scale-95 transition min-h-[40px] whitespace-nowrap"
                     >
-                      Cancelar
+                      Alterar
                     </button>
-                  )}
-                </div>
-
-                <div className="max-h-52 overflow-y-auto space-y-1.5 -mr-1 pr-1">
-                  {equipamentos.length === 0 ? (
-                    <p className="text-[11px] text-slate-400 text-center py-4">Nenhum equipamento encontrado.</p>
-                  ) : (
-                    equipamentos.map((eq) => {
-                      const sel = eq.id === selectedEqId;
-                      return (
+                  </div>
+                ) : (
+                  // Estado de Busca: exibe input e a lista de resultados
+                  <>
+                    <div className="relative">
+                      <Input
+                        ref={inputRef}
+                        type="text"
+                        inputMode="search"
+                        placeholder="Buscar: CME-AFTE.001, afte 001, compressor..."
+                        icon={<Search className="h-4 w-4" />}
+                        value={busca}
+                        onChange={(e) => setBusca(e.target.value)}
+                      />
+                      {selectedEq && (
                         <button
-                          key={eq.id}
                           type="button"
-                          onClick={() => {
-                            setSelectedEqId(eq.id);
-                            setShowSearch(false);
-                          }}
-                          className={`w-full text-left px-3 py-2.5 rounded-xl border text-xs transition flex items-center justify-between gap-2 ${
-                            sel ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200 hover:bg-slate-50'
-                          }`}
+                          onClick={() => setShowSearch(false)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-[10px] font-bold text-muted hover:text-content"
                         >
-                          <span className="min-w-0">
-                            <span className="font-bold text-slate-800 block truncate">{eq.codigoExibicao || eq.codigo}</span>
-                            <span className="text-[10px] text-slate-400 block truncate">{eq.tipo} · {eq.localizacaoAtual || '—'}</span>
-                          </span>
-                          {sel && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                          Cancelar
                         </button>
-                      );
-                    })
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </Card>
+                      )}
+                    </div>
+
+                    <div className="max-h-52 overflow-y-auto space-y-1.5 -mr-1 pr-1">
+                      {equipamentos.length === 0 ? (
+                        <p className="text-[11px] text-muted text-center py-4">Nenhum equipamento encontrado.</p>
+                      ) : (
+                        <AnimatePresence mode="popLayout">
+                          {equipamentos.map((eq) => {
+                            const sel = eq.id === selectedEqId;
+                            return (
+                              <motion.button
+                                key={eq.id}
+                                layout
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -6 }}
+                                transition={{ duration: 0.15 }}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedEqId(eq.id);
+                                  setShowSearch(false);
+                                }}
+                                className={cn(
+                                  'w-full text-left px-3 py-3 rounded-xl border text-xs transition flex items-center justify-between gap-2 min-h-[48px]',
+                                  sel
+                                    ? 'bg-accent/10 border-accent'
+                                    : 'bg-surface border-border hover:bg-surface-2'
+                                )}
+                              >
+                                <span className="min-w-0">
+                                  <span className="font-bold text-content block truncate">{eq.codigoExibicao || eq.codigo}</span>
+                                  <span className="text-[10px] text-muted block truncate">{eq.tipo} · {eq.localizacaoAtual || '—'}</span>
+                                </span>
+                                {sel && <Check className="h-4 w-4 text-accent shrink-0" />}
+                              </motion.button>
+                            );
+                          })}
+                        </AnimatePresence>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </Card>
 
 
-        {/* Tipo de Inspeção */}
-        <Card title="2. Tipo de Inspeção">
-          <div className="grid grid-cols-3 gap-2">
-            {(['PRE_EMBARQUE', 'OPERACIONAL', 'RETORNO_EMBARQUE'] as TipoInspecao[]).map(tipo => (
-              <button
-                key={tipo}
-                type="button"
-                onClick={() => setTipoInspecao(tipo)}
-                className={`py-3 px-1 rounded-xl text-xs font-bold text-center border transition-all duration-200 ${
-                  tipoInspecao === tipo
-                    ? 'bg-[#0b132b] border-[#0b132b] text-white shadow-md shadow-blue-900/10'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {tipo === 'PRE_EMBARQUE' && 'Pré-Embarque'}
-                {tipo === 'OPERACIONAL' && 'Operacional'}
-                {tipo === 'RETORNO_EMBARQUE' && 'Retorno'}
-              </button>
-            ))}
-          </div>
-        </Card>
-
-        {/* Informações de Campo */}
-        <Card title="3. Detalhes Operacionais">
-          <div className="space-y-4">
-            
-            {/* Responsável */}
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <User className="h-3.5 w-3.5 text-slate-400" />
-                <span>Responsável Técnico</span>
-              </label>
-              <input
-                type="text"
-                required
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="Nome do inspetor"
-                value={responsavel}
-                onChange={(e) => setResponsavel(e.target.value)}
-              />
-            </div>
-
-            {/* Localização */}
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                <span>Localização / Base</span>
-              </label>
-              <input
-                type="text"
-                required
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="Ex: Plataforma, Oficina, Base"
-                value={localizacao}
-                onChange={(e) => setLocalizacao(e.target.value)}
-              />
-            </div>
-
-            {/* Origem */}
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <MapPinIcon className="h-3.5 w-3.5 text-slate-400" />
-                <span>Origem</span>
-              </label>
-              <input
-                type="text"
-                required
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="Base de Origem (Ex: Macaé)"
-                value={origem}
-                onChange={(e) => setOrigem(e.target.value)}
-              />
-            </div>
-
-            {/* Destino */}
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <MapPinIcon className="h-3.5 w-3.5 text-slate-400" />
-                <span>Destino</span>
-              </label>
-              <input
-                type="text"
-                required
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="Destino do Equipamento (Ex: P-55)"
-                value={destino}
-                onChange={(e) => setDestino(e.target.value)}
-              />
-            </div>
-
-            {/* Compressor */}
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <Settings2 className="h-3.5 w-3.5 text-slate-400" />
-                <span>Compressores Utilizados no Teste</span>
-              </label>
-              <input
-                type="text"
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="Ex: Sullair 750 (ID: CP-01)"
-                value={compressorUtilizado}
-                onChange={(e) => setCompressorUtilizado(e.target.value)}
-              />
-            </div>
-
-            {/* Classificação */}
-            <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Classificação do Equipamento</label>
+            {/* Tipo de Inspeção */}
+            <Card title="2. Tipo de Inspeção">
               <div className="grid grid-cols-3 gap-2">
-                {(['NIVEL_1', 'NIVEL_2', 'REBUILD'] as const).map(classVal => (
+                {(['PRE_EMBARQUE', 'OPERACIONAL', 'RETORNO_EMBARQUE'] as TipoInspecao[]).map(tipo => (
                   <button
-                    key={classVal}
+                    key={tipo}
                     type="button"
-                    onClick={() => setClassificacao(classVal)}
-                    className={`py-2 px-1 rounded-lg text-xs font-bold text-center border transition-all duration-200 ${
-                      classificacao === classVal
-                        ? 'bg-[#0b132b] border-[#0b132b] text-white shadow-sm'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
+                    onClick={() => setTipoInspecao(tipo)}
+                    className={cn(
+                      'py-3 px-1 rounded-xl text-xs font-bold text-center border transition-all duration-200 min-h-[48px]',
+                      tipoInspecao === tipo
+                        ? 'bg-accent border-accent text-white shadow-sm'
+                        : 'bg-surface border-border text-content hover:bg-surface-2'
+                    )}
                   >
-                    {classVal.replace('_', ' ')}
+                    {tipo === 'PRE_EMBARQUE' && 'Pré-Embarque'}
+                    {tipo === 'OPERACIONAL' && 'Operacional'}
+                    {tipo === 'RETORNO_EMBARQUE' && 'Retorno'}
                   </button>
                 ))}
               </div>
-            </div>
+            </Card>
 
-          </div>
-        </Card>
+            {/* Informações de Campo */}
+            <Card title="3. Detalhes Operacionais">
+              <div className="space-y-4">
+                
+                {/* Responsável */}
+                <div>
+                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5 text-muted" />
+                    <span>Responsável Técnico</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                    placeholder="Nome do inspetor"
+                    value={responsavel}
+                    onChange={(e) => setResponsavel(e.target.value)}
+                  />
+                </div>
 
-        {/* Submit */}
-        <Button type="submit" fullWidth size="xl" className="flex items-center justify-center space-x-2 bg-[#0b132b] text-white hover:bg-[#1b2a47] shadow-md shadow-blue-900/10 py-3 rounded-xl font-bold">
-          <span>Iniciar Preenchimento</span>
-          <ArrowRight className="h-5 w-5" />
-        </Button>
-      </form>
+                {/* Localização */}
+                <div>
+                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-muted" />
+                    <span>Localização / Base</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                    placeholder="Ex: Plataforma, Oficina, Base"
+                    value={localizacao}
+                    onChange={(e) => setLocalizacao(e.target.value)}
+                  />
+                </div>
+
+                {/* Origem */}
+                <div>
+                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <MapPinIcon className="h-3.5 w-3.5 text-muted" />
+                    <span>Origem</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                    placeholder="Base de Origem (Ex: Macaé)"
+                    value={origem}
+                    onChange={(e) => setOrigem(e.target.value)}
+                  />
+                </div>
+
+                {/* Destino */}
+                <div>
+                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <MapPinIcon className="h-3.5 w-3.5 text-muted" />
+                    <span>Destino</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                    placeholder="Destino do Equipamento (Ex: P-55)"
+                    value={destino}
+                    onChange={(e) => setDestino(e.target.value)}
+                  />
+                </div>
+
+                {/* Compressor */}
+                <div>
+                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Settings2 className="h-3.5 w-3.5 text-muted" />
+                    <span>Compressores Utilizados no Teste</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                    placeholder="Ex: Sullair 750 (ID: CP-01)"
+                    value={compressorUtilizado}
+                    onChange={(e) => setCompressorUtilizado(e.target.value)}
+                  />
+                </div>
+
+                {/* Classificação */}
+                <div>
+                  <label className="block text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Classificação do Equipamento</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['NIVEL_1', 'NIVEL_2', 'REBUILD'] as const).map(classVal => (
+                      <button
+                        key={classVal}
+                        type="button"
+                        onClick={() => setClassificacao(classVal)}
+                        className={cn(
+                          'py-3 px-1 rounded-xl text-xs font-bold text-center border transition-all duration-200 min-h-[48px]',
+                          classificacao === classVal
+                            ? 'bg-accent border-accent text-white shadow-sm'
+                            : 'bg-surface border-border text-content hover:bg-surface-2'
+                        )}
+                      >
+                        {classVal.replace('_', ' ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </Card>
+
+            {/* Submit */}
+            <button
+              type="submit"
+              className="w-full flex items-center justify-center space-x-2 bg-accent text-white hover:bg-accent/90 shadow-sm py-3.5 rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
+            >
+              <span>Iniciar Preenchimento</span>
+              <ArrowRight className="h-5 w-5" />
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 };

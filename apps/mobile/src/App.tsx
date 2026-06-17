@@ -50,12 +50,12 @@ export const App: React.FC = () => {
 
   if (updating) {
     return (
-      <div className="fixed inset-0 bg-[#0b132b] text-white flex flex-col items-center justify-center z-50 p-6 font-sans">
-        <div className="h-14 w-14 rounded-2xl bg-[#38bdf8] text-[#0b132b] grid place-items-center mb-4 animate-pulse shadow-lg shadow-blue-500/20 text-xl font-bold">
+      <div className="fixed inset-0 bg-bg text-content flex flex-col items-center justify-center z-50 p-6 font-sans">
+        <div className="h-14 w-14 rounded-2xl bg-accent text-white grid place-items-center mb-4 animate-pulse shadow-lg shadow-accent/20 text-xl font-bold">
           ⚡
         </div>
-        <h2 className="text-base font-bold uppercase tracking-wider">Atualizando CME Checklist</h2>
-        <p className="text-[11px] text-slate-400 mt-2 text-center leading-normal">
+        <h2 className="text-base font-bold uppercase tracking-wider text-content">Atualizando CME Checklist</h2>
+        <p className="text-[11px] text-muted mt-2 text-center leading-normal">
           Baixando nova versão do sistema. <br />
           O aplicativo reiniciará em instantes.
         </p>

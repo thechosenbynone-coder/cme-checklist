@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Loader2 } from 'lucide-react';
-import { Button } from '@cme/ui';
+import { ThemeToggle } from '../components/ui/ThemeToggle';
 import api from '../services/api';
 
 export const Login: React.FC = () => {
@@ -31,21 +31,25 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-slate-50 flex items-center justify-center px-4">
-      <div className="max-w-sm w-full bg-white rounded-2xl shadow-md p-7">
+    <div className="min-h-[100dvh] bg-bg flex items-center justify-center px-4 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle className="text-muted hover:text-content hover:bg-surface-2" />
+      </div>
+
+      <div className="bg-surface border border-border rounded-2xl shadow-sm p-7 max-w-sm w-full">
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 rounded-xl bg-[#0b132b] text-[#38bdf8] grid place-items-center mb-3 shadow-md shadow-blue-900/10">
+          <div className="mx-auto h-12 w-12 rounded-xl bg-primary text-white grid place-items-center mb-3 shadow-md">
             <ShieldCheck className="h-7 w-7" />
           </div>
-          <h2 className="text-lg font-bold text-slate-900 uppercase tracking-tight">CME Checklist</h2>
-          <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-wider">
+          <h2 className="text-lg font-bold text-content uppercase tracking-tight">CME Checklist</h2>
+          <p className="text-[10px] text-muted mt-1 uppercase font-bold tracking-wider">
             App de Campo
           </p>
         </div>
 
         <form className="mt-7 space-y-4" onSubmit={handleLogin}>
           <div>
-            <label htmlFor="identifier" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+            <label htmlFor="identifier" className="block text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5">
               Usuário ou E-mail
             </label>
             <input
@@ -53,7 +57,7 @@ export const Login: React.FC = () => {
               type="text"
               autoComplete="username"
               required
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+              className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
               placeholder="Ex: Lucas Lima"
               value={identifier}
               onChange={(e) => {
@@ -63,7 +67,7 @@ export const Login: React.FC = () => {
             />
           </div>
           <div>
-            <label htmlFor="senha" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+            <label htmlFor="senha" className="block text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5">
               Senha
             </label>
             <input
@@ -71,7 +75,7 @@ export const Login: React.FC = () => {
               type="password"
               autoComplete="current-password"
               required
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-200"
+              className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
               placeholder="Sua senha"
               value={senha}
               onChange={(e) => {
@@ -81,24 +85,22 @@ export const Login: React.FC = () => {
             />
           </div>
 
-          {error && <p className="text-red-600 text-xs text-center">{error}</p>}
+          {error && <p className="text-red-600 dark:text-red-400 text-xs text-center">{error}</p>}
 
-          <Button
+          <button
             type="submit"
-            fullWidth
-            size="lg"
             disabled={loading}
-            className="bg-[#0b132b] text-white hover:bg-[#1b2a47] font-bold"
+            className="bg-accent text-white font-bold rounded-xl min-h-[48px] w-full active:scale-[0.98] transition disabled:opacity-50 hover:bg-accent/90"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin text-white" />
                 Entrando...
               </span>
             ) : (
               'Entrar'
             )}
-          </Button>
+          </button>
         </form>
 
       </div>
