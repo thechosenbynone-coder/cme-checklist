@@ -10,8 +10,7 @@ export const Login: React.FC = () => {
   const [senha, setSenha] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showConfig, setShowConfig] = useState(false);
-  const [tempUrl, setTempUrl] = useState('');
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,62 +101,6 @@ export const Login: React.FC = () => {
           </Button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col items-center">
-          <button
-            type="button"
-            onClick={() => {
-              setShowConfig(!showConfig);
-              setTempUrl(api.config.getBaseUrl());
-            }}
-            className="text-[10px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-wider transition"
-          >
-            {showConfig ? 'Ocultar Configuração' : 'Configurar Servidor'}
-          </button>
-
-          {showConfig && (
-            <div className="mt-4 w-full space-y-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  URL do Servidor API
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-800 outline-none focus:ring-1 focus:ring-blue-200"
-                  placeholder="Ex: https://cme-checklist-api.onrender.com"
-                  value={tempUrl}
-                  onChange={(e) => setTempUrl(e.target.value)}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    api.config.setBaseUrl(tempUrl);
-                    window.location.reload();
-                  }}
-                  className="flex-1 px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-700 active:scale-95 transition"
-                >
-                  Salvar e Reiniciar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    api.config.clearBaseUrl();
-                    window.location.reload();
-                  }}
-                  className="px-3 py-1.5 bg-slate-200 text-slate-650 rounded-lg text-xs font-bold hover:bg-slate-350 active:scale-95 transition"
-                  title="Restaurar padrão"
-                >
-                  Padrão
-                </button>
-              </div>
-              <p className="text-[8px] text-slate-400 text-center font-medium leading-normal">
-                Padrão compilado: <br />
-                <code className="text-slate-500">{import.meta.env.VITE_API_BASE_URL || '(vazio)'}</code>
-              </p>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

@@ -44,6 +44,8 @@ jobs:
         run: npm run prisma:generate
 
       - name: Build Web Application
+        env:
+          VITE_API_BASE_URL: https://cme-checklist-wps8.onrender.com
         run: npm run build --workspace=apps/mobile
 
       - name: Sync Web Assets to Native Android Project

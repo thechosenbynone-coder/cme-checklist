@@ -4,10 +4,6 @@ const TOKEN_KEY = 'cme_token';
 const USER_KEY = 'cme_current_user';
 
 const getBaseUrl = (): string => {
-  if (typeof window !== 'undefined') {
-    const saved = window.localStorage.getItem('cme_api_url');
-    if (saved) return saved.replace(/\/$/, '');
-  }
   return (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 };
 
