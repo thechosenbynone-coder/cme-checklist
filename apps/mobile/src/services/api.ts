@@ -3,7 +3,7 @@ import { Inspecao, Equipamento, Material, ChecklistModelo, User } from '@cme/typ
 const TOKEN_KEY = 'cme_token';
 const USER_KEY = 'cme_current_user';
 
-const getBaseUrl = (): string => {
+export const getBaseUrl = (): string => {
   return (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 };
 
@@ -145,19 +145,6 @@ const api = {
       return `${base}${url}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
     }
     return url;
-  },
-  config: {
-    getBaseUrl,
-    setBaseUrl: (url: string): void => {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem('cme_api_url', url);
-      }
-    },
-    clearBaseUrl: (): void => {
-      if (typeof window !== 'undefined') {
-        window.localStorage.removeItem('cme_api_url');
-      }
-    },
   },
 };
 

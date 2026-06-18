@@ -5,7 +5,7 @@ import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import Login from './pages/Login';
 import EquipamentoSelecao from './pages/EquipamentoSelecao';
 import ChecklistPreenchimento from './pages/ChecklistPreenchimento';
-import api from './services/api';
+import api, { getBaseUrl } from './services/api';
 
 const BUNDLE_VERSION = '1.0.0';
 
@@ -24,7 +24,7 @@ export const App: React.FC = () => {
       if (!Capacitor.isNativePlatform()) return;
 
       try {
-        const baseUrl = api.config.getBaseUrl();
+        const baseUrl = getBaseUrl();
         if (!baseUrl) return;
 
         const response = await fetch(`${baseUrl}/api/update/check?currentVersion=${BUNDLE_VERSION}`);
