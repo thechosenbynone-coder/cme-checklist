@@ -561,7 +561,7 @@ export const Dashboard: React.FC = () => {
                             {insp.responsavelGeral || 'N/A'}
                           </td>
                           <td className="px-5 py-3.5 whitespace-nowrap text-slate-500 font-medium">
-                            {insp.localizacao || 'N/A'}
+                            {insp.localizacao || '—'}
                           </td>
                           <td className="px-5 py-3.5 whitespace-nowrap">
                             <div className="flex items-center">

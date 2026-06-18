@@ -109,7 +109,7 @@ export const InspecaoDetalhes: React.FC = () => {
         subtitle={`Documento: ${inspecao.numeroDocumento || inspecao.id}${inspecao.modeloVersao ? ` · Modelo v${inspecao.modeloVersao}` : ''}${inspecao.validadaEm ? ` · Validada em ${new Date(inspecao.validadaEm).toLocaleString('pt-BR')}` : ''}`}
         headerAction={<Badge type={inspecao.status} />}
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-6">
           <div>
             <span className="text-slate-500 text-xs font-semibold uppercase tracking-wide block">Tipo de Inspeção</span>
             <span className="text-slate-900 text-sm font-bold block mt-1">
@@ -129,12 +129,6 @@ export const InspecaoDetalhes: React.FC = () => {
             </span>
           </div>
           <div>
-            <span className="text-slate-500 text-xs font-semibold uppercase tracking-wide block">Localização / Base</span>
-            <span className="text-slate-900 text-sm font-bold block mt-1">
-              {inspecao.localizacao || 'N/A'}
-            </span>
-          </div>
-          <div>
             <span className="text-slate-500 text-xs font-semibold uppercase tracking-wide block">Origem</span>
             <span className="text-slate-900 text-sm font-bold block mt-1">
               {inspecao.origem || 'N/A'}
@@ -144,6 +138,18 @@ export const InspecaoDetalhes: React.FC = () => {
             <span className="text-slate-500 text-xs font-semibold uppercase tracking-wide block">Destino</span>
             <span className="text-slate-900 text-sm font-bold block mt-1">
               {inspecao.destino || 'N/A'}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500 text-xs font-semibold uppercase tracking-wide block">Classificação</span>
+            <span className="text-slate-900 text-sm font-bold block mt-1">
+              {inspecao.classificacao ? inspecao.classificacao.replace('_', ' ') : 'N/A'}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500 text-xs font-semibold uppercase tracking-wide block">Compressores</span>
+            <span className="text-slate-900 text-sm font-bold block mt-1">
+              {inspecao.compressorUtilizado || 'N/A'}
             </span>
           </div>
         </div>

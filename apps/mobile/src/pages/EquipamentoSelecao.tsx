@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, MapPin, User, Settings2, ShieldCheck, MapPinIcon, Search, Check } from 'lucide-react';
+import { ArrowRight, User, Settings2, ShieldCheck, MapPinIcon, Search, Check } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { AppHeader } from '../components/ui/AppHeader';
@@ -30,7 +30,7 @@ export const EquipamentoSelecao: React.FC = () => {
     }
   }, [showSearch, selectedEqId]);
   const [responsavel, setResponsavel] = useState('');
-  const [localizacao, setLocalizacao] = useState('');
+
   const [compressorUtilizado, setCompressorUtilizado] = useState('');
   const [classificacao, setClassificacao] = useState<'NIVEL_1' | 'NIVEL_2' | 'REBUILD'>('NIVEL_1');
 
@@ -80,7 +80,6 @@ export const EquipamentoSelecao: React.FC = () => {
       equipamentoId: selectedEqId,
       tipo: tipoInspecao,
       responsavelGeral: maiusculas(responsavel),
-      localizacao: maiusculas(localizacao),
       compressorUtilizado: maiusculas(compressorUtilizado),
       classificacao,
       origem: maiusculas(origem),
@@ -233,21 +232,7 @@ export const EquipamentoSelecao: React.FC = () => {
                   />
                 </div>
 
-                {/* Localização */}
-                <div>
-                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 text-muted" />
-                    <span>Localização / Base</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-                    placeholder="Ex: Plataforma, Oficina, Base"
-                    value={localizacao}
-                    onChange={(e) => setLocalizacao(e.target.value)}
-                  />
-                </div>
+
 
                 {/* Origem */}
                 <div>

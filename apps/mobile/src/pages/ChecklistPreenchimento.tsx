@@ -425,7 +425,6 @@ export const ChecklistPreenchimento: React.FC = () => {
       modeloId: modelo.id,
       modeloVersao: modelo.versao,
       responsavelGeral: metadata.responsavelGeral,
-      localizacao: metadata.localizacao,
       status: 'CONCLUIDA',
       observacoesGerais: maiusculas(observacoesGerais),
       assinaturaUrl: assinaturaUrl || undefined,

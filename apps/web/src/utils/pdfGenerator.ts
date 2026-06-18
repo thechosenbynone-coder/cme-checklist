@@ -83,8 +83,9 @@ export const generateInspectionPDF = async (inspecao: Inspecao): Promise<void> =
   doc.text(`Origem: ${inspecao.origem || 'Não informado'}`, 14, 71);
   
   doc.text(`Data da Inspeção: ${new Date(inspecao.data).toLocaleString('pt-BR')}`, 110, 53);
-  doc.text(`Localização/Base: ${inspecao.localizacao || 'Não informado'}`, 110, 59);
-  doc.text(`Destino: ${inspecao.destino || 'Não informado'}`, 110, 65);
+  doc.text(`Classificação: ${inspecao.classificacao ? inspecao.classificacao.replace('_', ' ') : 'Não informado'}`, 110, 59);
+  doc.text(`Compressores: ${inspecao.compressorUtilizado || 'Não informado'}`, 110, 65);
+  doc.text(`Destino: ${inspecao.destino || 'Não informado'}`, 110, 71);
   
   let currentY = 84;
 
