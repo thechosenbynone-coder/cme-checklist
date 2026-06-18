@@ -26,6 +26,26 @@ if (!JWT_SECRET) {
   // Falha cedo: sem segredo não há como assinar/verificar tokens com segurança.
   throw new Error('JWT_SECRET não está definido nas variáveis de ambiente.');
 }
+
+// Validação robusta do segredo (Ajuste 2)
+const _trimmed = JWT_SECRET.trim();
+const _isWeak =
+  _trimmed.length === 0 ||
+  _trimmed.length < 32 ||
+  /sua-chave-secreta|changeme|your-?secret|^test$|^123456$|^secret$|placeholder|example/i.test(_trimmed);
+
+if (process.env.NODE_ENV === 'production' && _isWeak) {
+  throw new Error(
+    'JWT_SECRET fraco ou padrão detectado em produção. ' +
+    'Use um segredo aleatório com pelo menos 32 caracteres. ' +
+    'Gere com: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64\'))"'
+  );
+} else if (_isWeak) {
+  console.warn(
+    '[auth] ⚠️  JWT_SECRET fraco/padrão — aceito apenas em desenvolvimento. ' +
+    'NÃO use este segredo em produção.'
+  );
+}
 const TOKEN_TTL = process.env.JWT_TTL || '12h';
 
 // ── Hash de senha ──────────────────────────────────────────────────
