@@ -303,6 +303,30 @@ function calcularStatusLiberacao(eq: any): 'PENDENTE' | 'LIBERADO' | 'VENCIDO' {
   return 'PENDENTE';
 }
 
+async function registrarAuditoria(
+  userId: string | null | undefined,
+  userNome: string | null | undefined,
+  acao: 'CRIAR_INSPECAO' | 'VALIDAR_INSPECAO' | 'EDITAR_TEMPLATE',
+  entidade: 'INSPECAO' | 'CHECKLIST_MODELO',
+  entidadeId: string | null | undefined,
+  detalhe?: any
+) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        userId: userId || null,
+        userNome: userNome || null,
+        acao,
+        entidade,
+        entidadeId: entidadeId || null,
+        detalhe: detalhe || null,
+      },
+    });
+  } catch (err) {
+    console.error('Erro ao registrar log de auditoria:', err);
+  }
+}
+
 // GET /api/equipamentos  (busca inteligente via ?busca=)
 app.get('/api/equipamentos', async (req, res) => {
   try {
@@ -343,7 +367,11 @@ app.get('/api/equipamentos/:id', async (req, res) => {
         certificados: { orderBy: { validade: 'asc' } },
         inspecoes: {
           orderBy: { data: 'desc' },
-          include: { respostas: true },
+          include: {
+            respostas: true,
+            createdBy: { select: { nome: true } },
+            validadaPor: { select: { nome: true } },
+          },
         },
       },
     });
@@ -439,6 +467,15 @@ app.post('/api/modelos', requireRole('GESTOR', 'ADMIN'), async (req, res) => {
       });
     });
 
+    await registrarAuditoria(
+      req.user?.sub,
+      req.user?.nome,
+      'EDITAR_TEMPLATE',
+      'CHECKLIST_MODELO',
+      novo.id,
+      { nome: novo.nome, tipoEquipamento: novo.tipoEquipamento, versao: novo.versao }
+    );
+
     res.json(novo);
   } catch (error: any) {
     console.error('Error creating model version:', error);
@@ -474,6 +511,29 @@ app.get('/api/users', requireRole('GESTOR', 'ADMIN'), async (_req, res) => {
   }
 });
 
+// GET /api/auditoria — só Gestor/Admin (ISO 9001)
+app.get('/api/auditoria', requireRole('GESTOR', 'ADMIN'), async (req, res) => {
+  try {
+    const { entidade, entidadeId } = req.query;
+    const where: any = {};
+    if (typeof entidade === 'string' && entidade) {
+      where.entidade = entidade;
+    }
+    if (typeof entidadeId === 'string' && entidadeId) {
+      where.entidadeId = entidadeId;
+    }
+    const data = await prisma.auditLog.findMany({
+      where,
+      orderBy: { criadoEm: 'desc' },
+      take: 200,
+    });
+    res.json(data);
+  } catch (error: any) {
+    console.error('Error fetching audit logs:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
 // GET /api/inspecoes
 app.get('/api/inspecoes', async (_req, res) => {
   try {
@@ -482,6 +542,8 @@ app.get('/api/inspecoes', async (_req, res) => {
         equipamento: true,
         respostas: { include: { item: true } },
         materiais: { include: { material: true } },
+        createdBy: { select: { nome: true } },
+        validadaPor: { select: { nome: true } },
       },
       orderBy: { data: 'desc' },
     });
@@ -502,6 +564,8 @@ app.get('/api/inspecoes/:id', async (req, res) => {
         equipamento: true,
         respostas: { include: { item: true } },
         materiais: { include: { material: true } },
+        createdBy: { select: { nome: true } },
+        validadaPor: { select: { nome: true } },
       },
     });
 
@@ -586,6 +650,15 @@ app.post('/api/inspecoes', async (req, res) => {
       return createdInspecao;
     });
 
+    await registrarAuditoria(
+      req.user?.sub,
+      req.user?.nome,
+      'CRIAR_INSPECAO',
+      'INSPECAO',
+      result.id,
+      { status: result.status, numeroDocumento: result.numeroDocumento }
+    );
+
     res.json(result);
   } catch (error: any) {
     console.error('Error creating inspection:', error);
@@ -633,8 +706,20 @@ app.patch('/api/inspecoes/:id/validar', requireRole('GESTOR', 'ADMIN'), async (r
         equipamento: true,
         respostas: { include: { item: true } },
         materiais: { include: { material: true } },
+        createdBy: { select: { nome: true } },
+        validadaPor: { select: { nome: true } },
       },
     });
+
+    await registrarAuditoria(
+      req.user?.sub,
+      req.user?.nome,
+      'VALIDAR_INSPECAO',
+      'INSPECAO',
+      completa?.id,
+      { status: completa?.status, numeroDocumento: completa?.numeroDocumento }
+    );
+
     res.json(completa);
   } catch (error: any) {
     console.error('Error validating inspection:', error);

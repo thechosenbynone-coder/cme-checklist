@@ -28,7 +28,6 @@ export const Dashboard: React.FC = () => {
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [activeSection, setActiveSection] = useState('Visão Geral');
 
   useEffect(() => {
     // Carregar dados de inspeções e equipamentos
@@ -44,25 +43,12 @@ export const Dashboard: React.FC = () => {
   };
 
   // KPIs calculations
-  const totalInspecoes = inspecoes.length;
-  
-  // Equipamentos "Com Pendências" de acordo com o último checklist
-  const getStatusEquipamento = (eqId: string): 'LIBERADO' | 'COM_PENDENCIAS' | 'SEM_INSPECAO' => {
-    const eqInspecoes = inspecoes.filter(i => i.equipamentoId === eqId);
-    if (eqInspecoes.length === 0) return 'SEM_INSPECAO';
-    
-    const sorted = [...eqInspecoes].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-    const maisRecente = sorted[0];
-    
-    const temPendenciasNaoResolvidas = maisRecente.respostas.some(
-      r => r.status === 'PENDENTE' && r.pendenciaResolvida !== true
-    );
-    
-    return temPendenciasNaoResolvidas ? 'COM_PENDENCIAS' : 'LIBERADO';
-  };
-
-  const eqComPendenciasCount = equipamentos.filter(eq => getStatusEquipamento(eq.id) === 'COM_PENDENCIAS').length;
-  const eqLiberadosCount = equipamentos.filter(eq => getStatusEquipamento(eq.id) === 'LIBERADO').length;
+  const emAndamentoCount = inspecoes.filter(i => i.status === 'EM_ANDAMENTO').length;
+  const concluidasCount = inspecoes.filter(i => i.status === 'CONCLUIDA').length;
+  const validadasCount = inspecoes.filter(i => i.status === 'VALIDADA').length;
+  const pendenciasAtivasCount = inspecoes.filter(i => 
+    i.respostas.some(r => r.status === 'PENDENTE' && r.pendenciaResolvida !== true)
+  ).length;
 
   const totalMateriaisUtilizados = inspecoes.reduce(
     (total, insp) => total + insp.materiais.reduce((mTotal, m) => mTotal + m.quantidade, 0), 
@@ -103,20 +89,48 @@ export const Dashboard: React.FC = () => {
       const inspDay = inspecoes.filter(insp => new Date(insp.data).toDateString() === dateStr);
       
       const ops = inspDay.length;
-      const pend = inspDay.filter(insp => insp.respostas.some(r => r.status === 'PENDENTE')).length;
+      const pend = inspDay.filter(insp => insp.respostas.some(r => r.status === 'PENDENTE' && r.pendenciaResolvida !== true)).length;
       
       data.push({
         label: dayLabel,
-        ops: ops || (i === 4 ? 3 : i === 2 ? 4 : i === 0 ? 2 : 1), // fallback values for illustration if empty
-        pend: pend || (i === 4 ? 1 : i === 2 ? 2 : 0),
+        ops,
+        pend,
         date: d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }),
-        active: i === 2 // Highlight one column just like the image
+        active: false
+      });
+    }
+    return data;
+  };
+
+  const getDailyStatsForLast7Days = () => {
+    const data = [];
+    const today = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = d.toDateString();
+      const inspDay = inspecoes.filter(insp => new Date(insp.data).toDateString() === dateStr);
+      
+      const emAndamento = inspDay.filter(i => i.status === 'EM_ANDAMENTO').length;
+      const concluidas = inspDay.filter(i => i.status === 'CONCLUIDA').length;
+      const validadas = inspDay.filter(i => i.status === 'VALIDADA').length;
+      const pendencias = inspDay.filter(insp => 
+        insp.respostas.some(r => r.status === 'PENDENTE' && r.pendenciaResolvida !== true)
+      ).length;
+      
+      data.push({
+        emAndamento,
+        concluidas,
+        validadas,
+        pendencias,
+        total: inspDay.length
       });
     }
     return data;
   };
 
   const chartData = getChartData();
+  const dailyStats = getDailyStatsForLast7Days();
   const maxVal = Math.max(...chartData.map(d => d.ops + d.pend), 5);
 
   return (
@@ -150,23 +164,6 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Navigation Pills bar */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200/50 pb-2">
-        {['Visão Geral', 'Equipamentos', 'Checklists Recentes', 'Materiais Utilizados'].map((sec) => (
-          <button
-            key={sec}
-            onClick={() => setActiveSection(sec)}
-            className={`px-4 py-2 rounded-full text-xs font-bold transition-all duration-200 ${
-              activeSection === sec
-                ? 'bg-[#0b132b] text-white shadow-sm'
-                : 'bg-white text-slate-500 hover:text-slate-900 border border-slate-200/60'
-            }`}
-          >
-            {sec}
-          </button>
-        ))}
-      </div>
-
       {/* Main Grid: Left blocks and Right Sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -174,94 +171,105 @@ export const Dashboard: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           
           {/* Dashboard Operations Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             
-            {/* Card 1: Operations Checklists (White) */}
-            <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm flex flex-col justify-between min-h-[190px] hover:shadow-md transition duration-200">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Inspeções Realizadas</span>
-                <button className="text-slate-400 hover:text-slate-750 text-xs font-extrabold">...</button>
-              </div>
-              <div className="my-3">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold text-slate-900">{totalInspecoes}</span>
-                  <span className="text-slate-400 text-xs font-semibold">/ 100</span>
-                </div>
-                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-50 border border-green-150 text-[10px] font-bold text-green-700 mt-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                  <span>{Math.round((totalInspecoes / 100) * 100)}% da Meta</span>
-                </div>
-              </div>
-              {/* Pill representation graphic */}
-              <div className="flex items-end gap-1 h-8 pt-2">
-                {[0.4, 0.6, 0.8, 0.7, 0.9, 0.5, 0.3].map((val, idx) => (
-                  <div
-                    key={idx}
-                    className="flex-1 bg-slate-100 rounded-full overflow-hidden h-full flex flex-col justify-end"
-                  >
-                    <div 
-                      className="bg-slate-900 rounded-full transition-all duration-300"
-                      style={{ height: `${val * 100}%` }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Card 2: Active Pendencies (Soft Sky Blue) */}
-            <div className="bg-[#e0f2fe] border border-blue-200/50 rounded-3xl p-6 shadow-sm flex flex-col justify-between min-h-[190px] hover:shadow-md transition duration-200">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-extrabold text-blue-900/60 uppercase tracking-widest">Pendências Ativas</span>
-                <button className="text-blue-950/50 hover:text-blue-900 text-xs font-extrabold">...</button>
-              </div>
-              <div className="my-3">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold text-blue-955">{eqComPendenciasCount}</span>
-                  <span className="text-blue-900/60 text-xs font-semibold">/ {equipamentos.length} Equipamentos</span>
-                </div>
-                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#0b132b] text-[10px] font-bold text-[#38bdf8] mt-2">
-                  <span>Auditoria Preventiva Ativa</span>
-                </div>
-              </div>
-              {/* Pill representation graphic in dark style */}
-              <div className="flex items-end gap-1 h-8 pt-2">
-                {[0.3, 0.4, 0.2, 0.5, 0.3, 0.1, 0.2].map((val, idx) => (
-                  <div
-                    key={idx}
-                    className="flex-1 bg-[#0b132b]/10 rounded-full overflow-hidden h-full flex flex-col justify-end"
-                  >
-                    <div 
-                      className="bg-[#0b132b] rounded-full transition-all duration-300"
-                      style={{ height: `${val * 100}%` }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Card 3: Promotion CTA card (Dark Navy) */}
-            <div className="bg-[#0b132b] text-white rounded-3xl p-6 shadow-sm flex flex-col justify-between min-h-[190px] relative overflow-hidden group hover:shadow-md transition duration-200">
-              {/* Background gradient design */}
-              <div className="absolute -right-12 -bottom-12 w-32 h-32 rounded-full bg-gradient-to-br from-[#38bdf8]/20 to-blue-500/10 blur-xl group-hover:scale-125 transition duration-500" />
-              
+            {/* Card 1: Em Andamento */}
+            <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-sm flex flex-col justify-between min-h-[160px] hover:shadow-md transition duration-200">
               <div>
-                <h3 className="text-sm font-extrabold text-white leading-snug">
-                  Monitore e certifique <br />
-                  a NR13 com precisão.
-                </h3>
-                <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">
-                  Evite multas e paradas de campo com checklists de liberação ativos.
-                </p>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Em Andamento</span>
+                  <Activity className="h-4 w-4 text-amber-500" />
+                </div>
+                <div className="my-2">
+                  <span className="text-3xl font-extrabold text-slate-900">{emAndamentoCount}</span>
+                </div>
               </div>
+              {/* Mini chart */}
+              <div className="flex items-end gap-1 h-8 pt-2">
+                {dailyStats.map((d, idx) => {
+                  const max = Math.max(...dailyStats.map(s => s.emAndamento), 1);
+                  const height = (d.emAndamento / max) * 100;
+                  return (
+                    <div key={idx} className="flex-1 bg-slate-100 rounded-full overflow-hidden h-full flex flex-col justify-end" title={`${d.emAndamento} em andamento`}>
+                      <div className="bg-amber-500 rounded-full transition-all duration-300" style={{ height: `${height}%` }} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
-              <div className="pt-4 z-10">
-                <button
-                  onClick={handleNewChecklist}
-                  className="w-full bg-white text-slate-950 hover:bg-slate-100 text-xs font-extrabold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1 shadow-sm active:scale-97 transition duration-150"
-                >
-                  <span>Iniciar Inspeção</span>
-                  <ArrowUpRight className="h-3.5 w-3.5" />
-                </button>
+            {/* Card 2: Concluídas */}
+            <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-sm flex flex-col justify-between min-h-[160px] hover:shadow-md transition duration-200">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Concluídas</span>
+                  <CheckCircle className="h-4 w-4 text-blue-500" />
+                </div>
+                <div className="my-2">
+                  <span className="text-3xl font-extrabold text-slate-900">{concluidasCount}</span>
+                </div>
+              </div>
+              {/* Mini chart */}
+              <div className="flex items-end gap-1 h-8 pt-2">
+                {dailyStats.map((d, idx) => {
+                  const max = Math.max(...dailyStats.map(s => s.concluidas), 1);
+                  const height = (d.concluidas / max) * 100;
+                  return (
+                    <div key={idx} className="flex-1 bg-slate-100 rounded-full overflow-hidden h-full flex flex-col justify-end" title={`${d.concluidas} concluídas`}>
+                      <div className="bg-blue-500 rounded-full transition-all duration-300" style={{ height: `${height}%` }} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Card 3: Validadas */}
+            <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-sm flex flex-col justify-between min-h-[160px] hover:shadow-md transition duration-200">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Validadas</span>
+                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                </div>
+                <div className="my-2">
+                  <span className="text-3xl font-extrabold text-slate-900">{validadasCount}</span>
+                </div>
+              </div>
+              {/* Mini chart */}
+              <div className="flex items-end gap-1 h-8 pt-2">
+                {dailyStats.map((d, idx) => {
+                  const max = Math.max(...dailyStats.map(s => s.validadas), 1);
+                  const height = (d.validadas / max) * 100;
+                  return (
+                    <div key={idx} className="flex-1 bg-slate-100 rounded-full overflow-hidden h-full flex flex-col justify-end" title={`${d.validadas} validadas`}>
+                      <div className="bg-emerald-500 rounded-full transition-all duration-300" style={{ height: `${height}%` }} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Card 4: Pendências Ativas */}
+            <div className="bg-[#fef2f2] border border-red-200/50 rounded-3xl p-5 shadow-sm flex flex-col justify-between min-h-[160px] hover:shadow-md transition duration-200">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold text-red-900/60 uppercase tracking-widest">Pendências</span>
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                </div>
+                <div className="my-2">
+                  <span className="text-3xl font-extrabold text-red-900">{pendenciasAtivasCount}</span>
+                </div>
+              </div>
+              {/* Mini chart */}
+              <div className="flex items-end gap-1 h-8 pt-2">
+                {dailyStats.map((d, idx) => {
+                  const max = Math.max(...dailyStats.map(s => s.pendencias), 1);
+                  const height = (d.pendencias / max) * 100;
+                  return (
+                    <div key={idx} className="flex-1 bg-red-100 rounded-full overflow-hidden h-full flex flex-col justify-end" title={`${d.pendencias} pendências`}>
+                      <div className="bg-red-500 rounded-full transition-all duration-300" style={{ height: `${height}%` }} />
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -299,7 +307,7 @@ export const Dashboard: React.FC = () => {
               </div>
 
               {chartData.map((data, index) => {
-                const totalHeight = Math.min(((data.ops + data.pend) / maxVal) * 100, 100);
+                const totalHeight = data.ops + data.pend > 0 ? Math.min(((data.ops + data.pend) / maxVal) * 100, 100) : 0;
                 const opsPercent = (data.ops / (data.ops + data.pend || 1)) * 100;
                 const pendPercent = 100 - opsPercent;
 
@@ -307,24 +315,10 @@ export const Dashboard: React.FC = () => {
                   <div key={index} className="flex flex-col items-center flex-1 group z-10">
                     <div className="h-40 w-full flex items-end justify-center relative">
                       
-                      {/* Active highlighted tag */}
-                      {data.active && (
-                        <div className="absolute -top-6 bg-[#0b132b] text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shadow shadow-slate-900/10">
-                          87%
-                        </div>
-                      )}
-                      
-                      {/* Highlighted text tag */}
-                      {index === 4 && (
-                        <div className="absolute top-1/2 left-full -translate-y-1/2 ml-2 bg-[#38bdf8] text-[#0b132b] text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow z-25 whitespace-nowrap">
-                          32% Ativo
-                        </div>
-                      )}
-
                       {/* Rounded Pillar (Stacked Ops & Pendencies) */}
                       <div 
                         className={`w-4 md:w-6 bg-slate-100 rounded-full transition-all duration-300 overflow-hidden relative flex flex-col justify-end border border-slate-200/20`}
-                        style={{ height: `${totalHeight || 20}%` }}
+                        style={{ height: `${totalHeight}%` }}
                       >
                         {/* Pendencies bar in Sky Blue */}
                         {data.pend > 0 && (
@@ -435,7 +429,7 @@ export const Dashboard: React.FC = () => {
             </div>
             <div className="space-y-3">
               {equipamentos.map(eq => {
-                const status = getStatusEquipamento(eq.id);
+                const status = eq.statusLiberacao;
                 return (
                   <div key={eq.id} className="flex items-center justify-between p-3 bg-slate-50/50 border border-slate-100 rounded-2xl text-xs">
                     <div>
@@ -448,14 +442,14 @@ export const Dashboard: React.FC = () => {
                           Liberado
                         </span>
                       )}
-                      {status === 'COM_PENDENCIAS' && (
-                        <span className="text-[9px] font-extrabold bg-red-50 border border-red-150 text-red-700 px-2.5 py-1 rounded-full uppercase tracking-wider animate-pulse">
-                          Bloqueado
+                      {status === 'PENDENTE' && (
+                        <span className="text-[9px] font-extrabold bg-amber-50 border border-amber-150 text-amber-700 px-2.5 py-1 rounded-full uppercase tracking-wider animate-pulse">
+                          Pendente
                         </span>
                       )}
-                      {status === 'SEM_INSPECAO' && (
-                        <span className="text-[9px] font-extrabold bg-gray-50 border border-gray-150 text-gray-500 px-2.5 py-1 rounded-full uppercase tracking-wider">
-                          Sem Check
+                      {status === 'VENCIDO' && (
+                        <span className="text-[9px] font-extrabold bg-red-50 border border-red-150 text-red-700 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                          Vencido
                         </span>
                       )}
                     </div>
@@ -529,7 +523,6 @@ export const Dashboard: React.FC = () => {
                       <th className="px-5 py-3.5">Tipo</th>
                       <th className="px-5 py-3.5">Data / Hora</th>
                       <th className="px-5 py-3.5">Responsável</th>
-                      <th className="px-5 py-3.5">Localização</th>
                       <th className="px-5 py-3.5">Auditado</th>
                       <th className="px-5 py-3.5">Status</th>
                       <th className="px-5 py-3.5 text-right">Ações</th>
@@ -559,9 +552,6 @@ export const Dashboard: React.FC = () => {
                           </td>
                           <td className="px-5 py-3.5 whitespace-nowrap text-slate-700 font-bold">
                             {insp.responsavelGeral || 'N/A'}
-                          </td>
-                          <td className="px-5 py-3.5 whitespace-nowrap text-slate-500 font-medium">
-                            {insp.localizacao || '—'}
                           </td>
                           <td className="px-5 py-3.5 whitespace-nowrap">
                             <div className="flex items-center">

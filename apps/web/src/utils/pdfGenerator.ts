@@ -53,18 +53,18 @@ export const generateInspectionPDF = async (inspecao: Inspecao): Promise<void> =
   
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('CHECK LIST OPERACIONAL DE LIBERACAO', 77, 18);
+  doc.text('CHECK LIST OPERACIONAL DE LIBERAÇÃO', 77, 18);
   doc.text('DE EQUIPAMENTO', 77, 23);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.text('CHECK LIST OPERACIONAL AFTER COOLER', 77, 29);
+  doc.text('AFTER COOLER', 77, 29);
   
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.text('Cód: OPE-PC-03 ANEXO 2-A', 148, 16);
   doc.text(`Revisão: 00`, 148, 22);
-  doc.text(`Data: ${new Date(inspecao.data).toLocaleDateString('pt-BR')}`, 148, 28);
-  doc.text(`Status: ${inspecao.status}`, 148, 33);
+  doc.text(`Doc: ${inspecao.numeroDocumento || '—'}`, 148, 28);
+  doc.text(`Data: ${new Date(inspecao.data).toLocaleDateString('pt-BR')}`, 148, 33);
 
   // 2. Bloco de Dados do Equipamento
   doc.setFont('helvetica', 'bold');
@@ -74,85 +74,126 @@ export const generateInspectionPDF = async (inspecao: Inspecao): Promise<void> =
   doc.rect(10, 40, 190, 38);
 
   doc.setFont('helvetica', 'bold');
-  doc.text('DADOS DA INSPEÇÃO', 14, 46);
+  doc.text('DADOS DO DOCUMENTO', 14, 46);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(`Equipamento: ${inspecao.equipamento?.nome || 'N/A'} (${inspecao.equipamento?.codigo || 'N/A'})`, 14, 53);
-  doc.text(`Tipo de Inspeção: ${inspecao.tipo.replace('_', ' ')}`, 14, 59);
-  doc.text(`Responsável Geral: ${inspecao.responsavelGeral || 'Não informado'}`, 14, 65);
-  doc.text(`Origem: ${inspecao.origem || 'Não informado'}`, 14, 71);
   
-  doc.text(`Data da Inspeção: ${new Date(inspecao.data).toLocaleString('pt-BR')}`, 110, 53);
-  doc.text(`Classificação: ${inspecao.classificacao ? inspecao.classificacao.replace('_', ' ') : 'Não informado'}`, 110, 59);
-  doc.text(`Compressores: ${inspecao.compressorUtilizado || 'Não informado'}`, 110, 65);
-  doc.text(`Destino: ${inspecao.destino || 'Não informado'}`, 110, 71);
+  doc.text(`AFTER Nº: ${inspecao.equipamento?.codigoExibicao || inspecao.equipamento?.codigo || 'N/A'}`, 14, 53);
+  
+  const t1 = inspecao.tipo === 'PRE_EMBARQUE' ? 'X' : ' ';
+  const t2 = inspecao.tipo === 'OPERACIONAL' ? 'X' : ' ';
+  const t3 = inspecao.tipo === 'RETORNO_EMBARQUE' ? 'X' : ' ';
+  doc.text(`TIPO: [${t1}] Pré-embarque   [${t2}] Operacional   [${t3}] Retorno`, 14, 59);
+  
+  doc.text(`ORIGEM: ${inspecao.origem || '—'}`, 14, 65);
+  doc.text(`DESTINO: ${inspecao.destino || '—'}`, 14, 71);
+  
+  doc.text(`RESPONSÁVEL: ${inspecao.responsavelGeral || '—'}`, 110, 53);
+  
+  const c1 = (inspecao.classificacao || '').toUpperCase() === 'NIVEL_1' || (inspecao.classificacao || '').toUpperCase() === 'NÍVEL 1' ? 'X' : ' ';
+  const c2 = (inspecao.classificacao || '').toUpperCase() === 'NIVEL_2' || (inspecao.classificacao || '').toUpperCase() === 'NÍVEL 2' ? 'X' : ' ';
+  const c3 = (inspecao.classificacao || '').toUpperCase() === 'REBUILD' ? 'X' : ' ';
+  doc.text(`CLASSIFICAÇÃO: [${c1}] Nível 1   [${c2}] Nível 2   [${c3}] Rebuild`, 110, 59);
+  
+  doc.text(`COMPRESSOR UTILIZADO: ${inspecao.compressorUtilizado || '—'}`, 110, 65);
+  
+  // Legenda
+  doc.setFont('helvetica', 'bold');
+  doc.text('LEGENDA: OK , P - PENDENTE , N/A - NÃO APLICÁVEL', 14, 76);
   
   let currentY = 84;
 
-  // 3. Tabela de Respostas do Checklist
-  const itemRows = inspecao.respostas.map((resp) => {
-    let statusText = 'N/A';
-    if (resp.status === 'OK') statusText = 'OK';
-    if (resp.status === 'PENDENTE') {
-      statusText = resp.pendenciaResolvida ? 'RESOLVIDO' : 'PENDENTE';
+  // 3. Tabela de Respostas do Checklist (Agrupado por seção)
+  const responsesBySection: Record<string, typeof inspecao.respostas> = {};
+  inspecao.respostas.forEach((resp) => {
+    const sec = resp.item?.secao || 'INSPEÇÃO GERAL';
+    if (!responsesBySection[sec]) {
+      responsesBySection[sec] = [];
     }
-
-    let descText = resp.item?.descricao || 'Sem descrição';
-    if (resp.certificadoId || resp.certificadoValidade) {
-      const certParts = [];
-      if (resp.certificadoId) certParts.push(`ID: ${resp.certificadoId}`);
-      if (resp.certificadoValidade) certParts.push(`VAL: ${resp.certificadoValidade}`);
-      descText += `\n(${certParts.join(' / ')})`;
-    }
-
-    return [
-      resp.item?.secao || 'GERAL',
-      descText,
-      statusText,
-      resp.observacao || '',
-      resp.responsavel || ''
-    ];
+    responsesBySection[sec].push(resp);
   });
 
-  doc.autoTable({
-    startY: currentY,
-    head: [['Seção', 'Item de Inspeção', 'Status', 'Observações', 'Executante']],
-    body: itemRows,
-    theme: 'grid',
-    headStyles: {
-      fillColor: primaryColor,
-      textColor: [255, 255, 255],
-      fontSize: 9,
-      fontStyle: 'bold',
-      halign: 'left'
-    },
-    bodyStyles: {
-      fontSize: 8,
-      textColor: [50, 50, 50]
-    },
-    columnStyles: {
-      0: { cellWidth: 40 },
-      1: { cellWidth: 70 },
-      2: { cellWidth: 22, fontStyle: 'bold', halign: 'center' },
-      3: { cellWidth: 38 },
-      4: { cellWidth: 20 }
-    },
-    didParseCell: (data: any) => {
-      // Colorir a coluna do status
-      if (data.column.index === 2 && data.section === 'body') {
-        const val = data.cell.raw;
-        if (val === 'OK' || val === 'RESOLVIDO') {
-          data.cell.styles.textColor = successColor;
-        } else if (val === 'PENDENTE') {
-          data.cell.styles.textColor = dangerColor;
-        } else {
-          data.cell.styles.textColor = grayColor;
+  Object.entries(responsesBySection).forEach(([sectionName, list]) => {
+    // Sort items by order
+    const sortedList = [...list].sort((a, b) => (a.item?.ordem || 0) - (b.item?.ordem || 0));
+    
+    const rows = sortedList.map((resp) => {
+      let statusText = '—';
+      if (resp.item?.tipo === 'STATUS') {
+        if (resp.status === 'OK') statusText = 'OK';
+        else if (resp.status === 'PENDENTE') statusText = resp.pendenciaResolvida ? 'RESOLVIDO' : 'P - PENDENTE';
+        else if (resp.status === 'NAO_APLICAVEL') statusText = 'N/A';
+      } else if (resp.item?.tipo === 'CERTIFICADO') {
+        const parts = [];
+        if (resp.certificadoId) parts.push(`ID: ${resp.certificadoId}`);
+        if (resp.certificadoValidade) parts.push(`VAL: ${resp.certificadoValidade}`);
+        statusText = parts.length > 0 ? parts.join('\n') : 'N/A';
+      } else if (resp.item?.tipo === 'MEDICAO') {
+        statusText = resp.valorNumerico != null ? `${resp.valorNumerico} ${resp.item.unidade || ''}` : '—';
+      } else if (resp.item?.tipo === 'TEXTO') {
+        statusText = '—';
+      }
+      
+      let obsText = resp.observacao || '';
+      if (resp.item?.tipo === 'TEXTO' && resp.valorTexto) {
+        obsText = resp.valorTexto + (obsText ? `\nObs: ${obsText}` : '');
+      }
+      
+      return [
+        resp.item?.descricao || 'Sem descrição',
+        obsText,
+        statusText
+      ];
+    });
+
+    if (currentY > 250) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(sectionName.toUpperCase(), 10, currentY);
+    currentY += 4;
+
+    doc.autoTable({
+      startY: currentY,
+      head: [['ITEM DE INSPEÇÃO', 'OBSERVAÇÃO / DETALHES', 'STATUS']],
+      body: rows,
+      theme: 'grid',
+      headStyles: {
+        fillColor: primaryColor,
+        textColor: [255, 255, 255],
+        fontSize: 8,
+        fontStyle: 'bold'
+      },
+      bodyStyles: {
+        fontSize: 7.5,
+        textColor: [50, 50, 50]
+      },
+      columnStyles: {
+        0: { cellWidth: 105 },
+        1: { cellWidth: 55 },
+        2: { cellWidth: 30, fontStyle: 'bold', halign: 'center' }
+      },
+      didParseCell: (data: any) => {
+        if (data.column.index === 2 && data.section === 'body') {
+          const val = data.cell.raw;
+          if (typeof val === 'string') {
+            if (val.startsWith('OK') || val.startsWith('RESOLVIDO')) {
+              data.cell.styles.textColor = successColor;
+            } else if (val.includes('PENDENTE')) {
+              data.cell.styles.textColor = dangerColor;
+            } else if (val === 'N/A' || val === '—') {
+              data.cell.styles.textColor = grayColor;
+            }
+          }
         }
       }
-    }
-  });
+    });
 
-  currentY = (doc as any).lastAutoTable.finalY + 10;
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+  });
 
   // 4. Materiais Consumidos
   if (inspecao.materiais && inspecao.materiais.length > 0) {
@@ -175,7 +216,7 @@ export const generateInspectionPDF = async (inspecao: Inspecao): Promise<void> =
 
     doc.autoTable({
       startY: currentY,
-      head: [['Código SKU', 'Descrição do Material', 'Quantidade', 'Observações']],
+      head: [['CÓDIGO', 'DESCRIÇÃO', 'QTD', 'OBS']],
       body: materialRows,
       theme: 'grid',
       headStyles: {
@@ -232,7 +273,14 @@ export const generateInspectionPDF = async (inspecao: Inspecao): Promise<void> =
   doc.text(inspecao.responsavelGeral || 'Operador de Campo', 14, currentY + 34);
 
   doc.text('Assinatura do Supervisor / Validador', 114, currentY + 30);
-  doc.text('Continental Oil & Gas Services', 114, currentY + 34);
+  if (inspecao.status === 'VALIDADA') {
+    doc.text(inspecao.validadaPor?.nome || 'Validador Autorizado', 114, currentY + 34);
+    doc.setFont('helvetica', 'italic');
+    doc.text(`Validado em: ${new Date(inspecao.validadaEm!).toLocaleString('pt-BR')}`, 114, currentY + 38);
+    doc.setFont('helvetica', 'bold');
+  } else {
+    doc.text('Pendente de validação', 114, currentY + 34);
+  }
 
   // Inserir imagem de assinatura se houver
   const assinatura = inspecao.assinaturaUrl || inspecao.assinaturaBase64;

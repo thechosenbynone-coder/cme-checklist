@@ -194,4 +194,18 @@ model MaterialUtilizado {
   material Material @relation(fields: [materialId], references: [id])
 }
 
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  userNome   String?
+  acao       String   // CRIAR_INSPECAO | VALIDAR_INSPECAO | EDITAR_TEMPLATE
+  entidade   String   // INSPECAO | CHECKLIST_MODELO
+  entidadeId String?
+  detalhe    Json?
+  criadoEm   DateTime @default(now())
+
+  @@index([entidade, entidadeId])
+  @@index([criadoEm])
+}
+
 // Futuro: Certificados, Fotos, Assinaturas, etc.

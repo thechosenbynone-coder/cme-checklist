@@ -127,6 +127,15 @@ const api = {
     logout: (): void => clearSession(),
     listUsers: (): Promise<User[]> => request<User[]>('/users'),
   },
+  auditoria: {
+    list: (entidade?: string, entidadeId?: string): Promise<any[]> => {
+      const params = new URLSearchParams();
+      if (entidade) params.append('entidade', entidade);
+      if (entidadeId) params.append('entidadeId', entidadeId);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      return request<any[]>(`/auditoria${query}`);
+    },
+  },
   upload: {
     file: async (file: File | Blob, filename: string): Promise<string> => {
       const formData = new FormData();

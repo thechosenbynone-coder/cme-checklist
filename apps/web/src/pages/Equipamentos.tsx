@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { Equipamento, Certificado, Inspecao } from '@cme/types';
+import { Link } from 'react-router-dom';
 
 // Semáforo de liberação
 const STATUS_META: Record<string, { label: string; cls: string; Icon: any }> = {
@@ -244,6 +245,8 @@ const DetalheEquipamento: React.FC<{
   onClose: () => void;
   onGerarChecklist: () => void;
 }> = ({ detalhe, loading, onClose, onGerarChecklist }) => {
+  const [lightboxMedia, setLightboxMedia] = useState<{ url: string; type: 'photo' | 'signature'; source: string } | null>(null);
+
   if (loading || !detalhe) {
     return (
       <div className="p-8 text-center text-slate-400 text-sm">{loading ? 'Carregando...' : 'Selecione um equipamento.'}</div>
@@ -253,6 +256,52 @@ const DetalheEquipamento: React.FC<{
   const certs: Certificado[] = detalhe.certificados || [];
   const inspecoes: Inspecao[] = (detalhe as any).inspecoes || [];
   const dados = (detalhe.dadosPlanilha || {}) as Record<string, unknown>;
+
+  const mediaList = useMemo(() => {
+    const urls: { url: string; type: 'photo' | 'signature'; source: string }[] = [];
+    
+    inspecoes.forEach((insp) => {
+      // Signature
+      if (insp.assinaturaUrl) {
+        urls.push({ 
+          url: insp.assinaturaUrl, 
+          type: 'signature', 
+          source: `Assinatura de ${insp.responsavelGeral || 'Inspetor'} em ${new Date(insp.data).toLocaleDateString('pt-BR')}` 
+        });
+      }
+      // General inspection photos
+      if (insp.fotosUrls && insp.fotosUrls.length > 0) {
+        insp.fotosUrls.forEach((url, idx) => {
+          urls.push({ 
+            url, 
+            type: 'photo', 
+            source: `Foto Geral #${idx + 1} - ${insp.numeroDocumento || 'Sem Doc'}` 
+          });
+        });
+      }
+      // Item response photos
+      if (insp.respostas && insp.respostas.length > 0) {
+        insp.respostas.forEach((resp) => {
+          if (resp.fotoUrl) {
+            urls.push({ 
+              url: resp.fotoUrl, 
+              type: 'photo', 
+              source: `Evidência de Falha: ${resp.item?.descricao || 'Item'} - ${insp.numeroDocumento || 'Sem Doc'}` 
+            });
+          }
+          if (resp.fotoResolvidaUrl) {
+            urls.push({ 
+              url: resp.fotoResolvidaUrl, 
+              type: 'photo', 
+              source: `Evidência de Resolução: ${resp.item?.descricao || 'Item'} - ${insp.numeroDocumento || 'Sem Doc'}` 
+            });
+          }
+        });
+      }
+    });
+
+    return urls;
+  }, [inspecoes]);
 
   return (
     <div className="p-6 space-y-5">
@@ -308,6 +357,38 @@ const DetalheEquipamento: React.FC<{
         )}
       </div>
 
+      {/* Evidências */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 space-y-2">
+        <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+          📷 Evidências ({mediaList.length})
+        </h3>
+        {mediaList.length === 0 ? (
+          <p className="text-[11px] text-slate-400">Nenhuma evidência registrada.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {mediaList.map((media, idx) => {
+              const isVideo = media.url.toLowerCase().endsWith('.webm') || media.url.startsWith('data:video/');
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setLightboxMedia(media)}
+                  className="relative aspect-square rounded-lg overflow-hidden border border-slate-100 bg-slate-50 hover:opacity-85 transition group"
+                >
+                  {isVideo ? (
+                    <video src={api.mediaUrl(media.url)} className="object-cover w-full h-full" muted playsInline />
+                  ) : (
+                    <img src={api.mediaUrl(media.url)} alt={media.source} className="object-cover w-full h-full" />
+                  )}
+                  {media.type === 'signature' && (
+                    <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-[8px] text-white py-0.5 text-center font-bold font-mono">ASSINATURA</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Histórico */}
       <div className="bg-white border border-slate-200/80 rounded-2xl p-4 space-y-2">
         <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
@@ -316,12 +397,34 @@ const DetalheEquipamento: React.FC<{
         {inspecoes.length === 0 ? (
           <p className="text-[11px] text-slate-400">Nenhuma inspeção registrada ainda.</p>
         ) : (
-          inspecoes.slice(0, 8).map((i) => (
-            <div key={i.id} className="flex justify-between items-center text-[11px] border-t border-slate-100 pt-2 first:border-0 first:pt-0">
-              <span className="text-slate-600 font-semibold">{new Date(i.data).toLocaleDateString('pt-BR')}</span>
-              <span className="text-slate-400">{i.status}</span>
-            </div>
-          ))
+          <div className="space-y-2">
+            {inspecoes.slice(0, 8).map((i) => (
+              <Link
+                key={i.id}
+                to={`/inspecoes/${i.id}`}
+                className="block p-3 bg-slate-50 border border-slate-100 rounded-xl hover:border-slate-300 transition duration-150 text-left"
+              >
+                <div className="flex justify-between items-start">
+                  <span className="font-extrabold text-slate-800 text-[11px] block">
+                    {i.numeroDocumento || 'Sem Número'}
+                  </span>
+                  <span className={`text-[8px] font-extrabold px-2 py-0.5 rounded-full border uppercase ${
+                    i.status === 'VALIDADA' ? 'bg-green-50 border-green-200 text-green-700' :
+                    i.status === 'CONCLUIDA' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                    'bg-amber-50 border-amber-200 text-amber-700'
+                  }`}>
+                    {i.status}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1 font-semibold">
+                  <span>{new Date(i.data).toLocaleDateString('pt-BR')} ({i.tipo === 'PRE_EMBARQUE' ? 'Pré-Emb.' : i.tipo === 'OPERACIONAL' ? 'Operac.' : 'Retorno'})</span>
+                  {i.validadaEm && (
+                    <span className="text-[9px] text-slate-400 italic font-medium">Validado em {new Date(i.validadaEm).toLocaleDateString('pt-BR')}</span>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
         )}
       </div>
 
@@ -339,6 +442,31 @@ const DetalheEquipamento: React.FC<{
           ))}
         </div>
       </details>
+
+      {/* Lightbox fullscreen */}
+      {lightboxMedia && (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-md p-4"
+          onClick={() => setLightboxMedia(null)}
+        >
+          <button
+            onClick={() => setLightboxMedia(null)}
+            className="absolute top-4 right-4 p-2 bg-slate-800 hover:bg-slate-700 text-white rounded-full shadow-lg transition"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <div className="max-w-2xl w-full max-h-[80vh] flex items-center justify-center p-2" onClick={(e) => e.stopPropagation()}>
+            {lightboxMedia.url.toLowerCase().endsWith('.webm') || lightboxMedia.url.startsWith('data:video/') ? (
+              <video src={api.mediaUrl(lightboxMedia.url)} controls autoPlay className="max-w-full max-h-[75vh] rounded-xl shadow-2xl" />
+            ) : (
+              <img src={api.mediaUrl(lightboxMedia.url)} alt={lightboxMedia.source} className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl" />
+            )}
+          </div>
+          <p className="text-white text-xs font-bold mt-4 text-center max-w-lg bg-slate-900/60 px-4 py-2 rounded-xl border border-slate-800">
+            {lightboxMedia.source}
+          </p>
+        </div>
+      )}
     </div>
   );
 };
