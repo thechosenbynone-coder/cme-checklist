@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Loader2 } from 'lucide-react';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
-import api from '../services/api';
+import api, { getBaseUrl } from '../services/api';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -10,6 +10,17 @@ export const Login: React.FC = () => {
   const [senha, setSenha] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.sessionStorage.getItem('cme_prewarmed')) {
+      window.sessionStorage.setItem('cme_prewarmed', 'true');
+      try {
+        fetch(getBaseUrl() + '/health').catch(() => {});
+      } catch (err) {
+        // fire-and-forget
+      }
+    }
+  }, []);
 
 
   const handleLogin = async (e: React.FormEvent) => {

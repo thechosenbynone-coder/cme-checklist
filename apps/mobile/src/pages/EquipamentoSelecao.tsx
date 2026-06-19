@@ -68,6 +68,16 @@ export const EquipamentoSelecao: React.FC = () => {
 
   const selectedEq = equipamentos.find((e) => e.id === selectedEqId);
 
+  const generateUUID = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEqId) {
@@ -75,7 +85,7 @@ export const EquipamentoSelecao: React.FC = () => {
       return;
     }
 
-    // Metadados na sessão (texto livre normalizado em MAIÚSCULAS)
+    const inspecaoId = generateUUID();
     const metadata = {
       equipamentoId: selectedEqId,
       tipo: tipoInspecao,
@@ -84,9 +94,34 @@ export const EquipamentoSelecao: React.FC = () => {
       classificacao,
       origem: maiusculas(origem),
       destino: maiusculas(destino),
+      equipamentoCodigo: selectedEq ? (selectedEq.codigoExibicao || selectedEq.codigo) : 'Equipamento',
+      equipamentoNome: selectedEq ? selectedEq.nome : '',
     };
-    window.sessionStorage.setItem('cme_nova_inspecao_meta', JSON.stringify(metadata));
-    navigate('/checklist');
+
+    const initialDraft = {
+      id: inspecaoId,
+      metadata,
+      respostas: {},
+      fotosEquipamento: [undefined, undefined, undefined],
+      materiaisUtilizados: [],
+      observacoesGerais: '',
+      currentStep: 0,
+      dirty: true,
+      localUpdatedAt: new Date().toISOString(),
+      modeloId: '', 
+      modeloVersao: 0,
+    };
+
+    localStorage.setItem(`cme_draft_${inspecaoId}`, JSON.stringify(initialDraft));
+
+    const draftsRaw = localStorage.getItem('cme_drafts');
+    const drafts: string[] = draftsRaw ? JSON.parse(draftsRaw) : [];
+    if (!drafts.includes(inspecaoId)) {
+      drafts.push(inspecaoId);
+      localStorage.setItem('cme_drafts', JSON.stringify(drafts));
+    }
+
+    navigate(`/checklist/${inspecaoId}`);
   };
 
   return (

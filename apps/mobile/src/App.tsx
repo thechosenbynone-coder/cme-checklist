@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import Login from './pages/Login';
+import Hub from './pages/Hub';
 import EquipamentoSelecao from './pages/EquipamentoSelecao';
 import ChecklistPreenchimento from './pages/ChecklistPreenchimento';
 import api, { getBaseUrl } from './services/api';
@@ -71,12 +72,20 @@ export const App: React.FC = () => {
           path="/"
           element={
             <ProtectedRoute>
+              <Hub />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/novo"
+          element={
+            <ProtectedRoute>
               <EquipamentoSelecao />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/checklist"
+          path="/checklist/:id"
           element={
             <ProtectedRoute>
               <ChecklistPreenchimento />

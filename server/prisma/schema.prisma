@@ -121,6 +121,7 @@ model Inspecao {
   equipamentoId String
   tipo          TipoInspecao
   data          DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   numeroDocumento String? @unique // registro único rastreável (ISO 9001)
   modeloId      String?  // versão do template usada (ISO 9001 — rastreabilidade)
   modeloVersao  Int?

@@ -554,6 +554,248 @@ app.get('/api/inspecoes', async (_req, res) => {
   }
 });
 
+// GET /api/inspecoes/mine — NOVO
+app.get('/api/inspecoes/mine', async (req, res) => {
+  try {
+    const status = req.query.status as string | undefined;
+    const userId = req.user?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Não autenticado.' });
+    }
+
+    const where: any = {
+      createdById: userId,
+    };
+
+    if (status) {
+      if (status.includes(',')) {
+        where.status = { in: status.split(',') };
+      } else {
+        where.status = status;
+      }
+    }
+
+    const data = await prisma.inspecao.findMany({
+      where,
+      select: {
+        id: true,
+        status: true,
+        data: true,
+        updatedAt: true,
+        tipo: true,
+        equipamento: {
+          select: {
+            codigo: true,
+            codigoExibicao: true,
+            nome: true,
+          },
+        },
+        _count: {
+          select: {
+            respostas: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    res.json(data);
+  } catch (error: any) {
+    console.error('Error fetching mine inspections:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// GET /api/checklist/bootstrap — NOVO
+app.get('/api/checklist/bootstrap', async (req, res) => {
+  try {
+    const { equipamentoId, tipo } = req.query;
+    if (typeof equipamentoId !== 'string' || typeof tipo !== 'string') {
+      return res.status(400).json({ error: 'Parâmetros equipamentoId e tipo são obrigatórios.' });
+    }
+
+    const eq = await prisma.equipamento.findFirst({
+      where: { OR: [{ id: equipamentoId }, { codigo: equipamentoId }] },
+      include: { certificados: { orderBy: { validade: 'asc' } } }
+    });
+
+    if (!eq) {
+      return res.status(404).json({ error: 'Equipamento não encontrado.' });
+    }
+
+    const model = await prisma.checklistModelo.findFirst({
+      where: { tipoEquipamento: tipo, ativo: true },
+      include: { itens: { orderBy: { ordem: 'asc' } } }
+    });
+
+    const materials = await prisma.material.findMany({
+      where: { ativo: true },
+      orderBy: { descricao: 'asc' }
+    });
+
+    res.json({
+      equipamento: { ...eq, statusLiberacao: calcularStatusLiberacao(eq) },
+      modelo: model || null,
+      materiais: materials
+    });
+  } catch (error: any) {
+    console.error('Error during bootstrap:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// PUT /api/inspecoes/:id — upsert idempotente — NOVO
+app.put('/api/inspecoes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const parsed = inspecaoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados da inspeção inválidos.' });
+    }
+    const { respostas, materiais, ...rest } = parsed.data;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.inspecao.findUnique({
+        where: { id },
+      });
+
+      if (existing && (existing.status === 'CONCLUIDA' || existing.status === 'VALIDADA')) {
+        throw { status: 409, message: 'Não é possível alterar uma inspeção já concluída ou validada.' };
+      }
+
+      const dataField: any = {
+        equipamentoId: rest.equipamentoId,
+        tipo: rest.tipo,
+        data: rest.data ? new Date(rest.data) : (existing ? existing.data : new Date()),
+        modeloId: rest.modeloId || null,
+        modeloVersao: rest.modeloVersao ?? null,
+        responsavelGeral: rest.responsavelGeral,
+        localizacao: rest.localizacao,
+        status: rest.status,
+        observacoesGerais: rest.observacoesGerais,
+        assinaturaUrl: rest.assinaturaUrl || null,
+        fotosUrls: rest.fotosUrls || rest.fotosEquipamento || [],
+        origem: rest.origem || null,
+        destino: rest.destino || null,
+        compressorUtilizado: rest.compressorUtilizado || null,
+        classificacao: rest.classificacao || null,
+      };
+
+      let savedInspecao;
+
+      if (existing) {
+        savedInspecao = await tx.inspecao.update({
+          where: { id },
+          data: dataField,
+        });
+      } else {
+        const numeroDocumento =
+          rest.numeroDocumento ||
+          `OPE-PC-03/${new Date().toISOString().slice(0, 10).replace(/-/g, '')}/${id.slice(-6).toUpperCase()}`;
+
+        savedInspecao = await tx.inspecao.create({
+          data: {
+            ...dataField,
+            id,
+            numeroDocumento,
+            createdById: rest.createdById || req.user?.sub || null,
+          },
+        });
+      }
+
+      // Upsert Respostas
+      if (respostas) {
+        const itemIds = respostas.map((r) => r.itemId);
+        // Remove item responses that are no longer in the payload
+        await tx.respostaItem.deleteMany({
+          where: {
+            inspecaoId: id,
+            itemId: { notIn: itemIds },
+          },
+        });
+
+        // Upsert each response in the payload
+        for (const r of respostas) {
+          await tx.respostaItem.upsert({
+            where: {
+              inspecaoId_itemId: {
+                inspecaoId: id,
+                itemId: r.itemId,
+              },
+            },
+            create: {
+              id: r.id || `resp-${r.itemId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              inspecaoId: id,
+              itemId: r.itemId,
+              status: r.status ?? null,
+              observacao: r.observacao || null,
+              responsavel: r.responsavel || null,
+              valorNumerico: r.valorNumerico ?? null,
+              valorTexto: r.valorTexto || null,
+              createdById: r.createdById || null,
+              fotoUrl: r.fotoUrl || null,
+              fotoResolvidaUrl: r.fotoResolvidaUrl || null,
+              certificadoId: r.certificadoId || null,
+              certificadoValidade: r.certificadoValidade || null,
+              pendenciaResolvida: r.pendenciaResolvida ?? null,
+            },
+            update: {
+              status: r.status ?? null,
+              observacao: r.observacao || null,
+              responsavel: r.responsavel || null,
+              valorNumerico: r.valorNumerico ?? null,
+              valorTexto: r.valorTexto || null,
+              createdById: r.createdById || null,
+              fotoUrl: r.fotoUrl || null,
+              fotoResolvidaUrl: r.fotoResolvidaUrl || null,
+              certificadoId: r.certificadoId || null,
+              certificadoValidade: r.certificadoValidade || null,
+              pendenciaResolvida: r.pendenciaResolvida ?? null,
+            },
+          });
+        }
+      }
+
+      // Delete + recreate materiais
+      await tx.materialUtilizado.deleteMany({ where: { inspecaoId: id } });
+      if (materiais && materiais.length > 0) {
+        await tx.materialUtilizado.createMany({
+          data: materiais.map((m, idx) => ({
+            id: m.id || `mu-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            inspecaoId: id,
+            materialId: m.materialId,
+            quantidade: m.quantidade,
+            observacao: m.observacao || null,
+          })),
+        });
+      }
+
+      return savedInspecao;
+    });
+
+    // Auditoria: ONLY log when status = CONCLUIDA
+    if (result.status === 'CONCLUIDA') {
+      await registrarAuditoria(
+        req.user?.sub,
+        req.user?.nome,
+        'CRIAR_INSPECAO',
+        'INSPECAO',
+        result.id,
+        { status: result.status, numeroDocumento: result.numeroDocumento, upsert: true }
+      );
+    }
+
+    res.json(result);
+  } catch (error: any) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    console.error('Error in PUT inspection:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
 // GET /api/inspecoes/:id
 app.get('/api/inspecoes/:id', async (req, res) => {
   try {

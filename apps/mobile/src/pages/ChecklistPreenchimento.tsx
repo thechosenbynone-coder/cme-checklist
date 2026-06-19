@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, AlertTriangle, HelpCircle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Camera } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Check, AlertTriangle, HelpCircle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Camera, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { StatusChip } from '../components/ui/StatusChip';
 import { AppHeader } from '../components/ui/AppHeader';
 import { cn } from '../lib/cn';
-import api from '../services/api';
+import api, { getBaseUrl } from '../services/api';
 import { Equipamento, ChecklistModelo, Material, Inspecao, RespostaItem, MaterialUtilizado, StatusItem, maiusculas } from '@cme/types';
 
 // Formata ISO (YYYY-MM-DD...) para DD/MM/AAAA
@@ -24,8 +24,69 @@ const stepVariants = {
   exit: { opacity: 0, x: -16 },
 };
 
+interface DraftLocal {
+  id: string;
+  metadata: {
+    equipamentoId: string;
+    tipo: string;
+    responsavelGeral: string;
+    compressorUtilizado?: string;
+    classificacao?: string;
+    origem: string;
+    destino: string;
+    equipamentoCodigo?: string;
+    equipamentoNome?: string;
+  };
+  respostas: Record<string, any>;
+  fotosEquipamento: (string | undefined)[];
+  materiaisUtilizados: any[];
+  observacoesGerais: string;
+  currentStep: number;
+  dirty: boolean;
+  localUpdatedAt: string;
+  modeloId: string;
+  modeloVersao: number;
+}
+
+// Pre-fill answers with equipment certifications if available
+const initResponses = (mod: ChecklistModelo, eq: Equipamento) => {
+  const initialRespostas: Record<string, any> = {};
+  const vencidos: Record<string, boolean> = {};
+  const certs = eq.certificados || [];
+  const certEslinga = certs.find(c => (c.tipo || '').toUpperCase() === 'ESLINGA');
+  const certEquip = certs.find(c => (c.tipo || '').toUpperCase() === 'EQUIPAMENTO');
+  const agora = new Date();
+
+  mod.itens?.forEach(item => {
+    let certId = '';
+    let certValidade = '';
+    if (item.tipo === 'CERTIFICADO') {
+      const cert = /LINGADA/i.test(item.descricao) ? certEslinga : certEquip;
+      if (cert) {
+        certId = cert.numero || '';
+        certValidade = fmtBR(cert.validade);
+        if (cert.validade && new Date(cert.validade) < agora) vencidos[item.id] = true;
+      }
+    }
+    initialRespostas[item.id] = {
+      status: undefined,
+      observacao: '',
+      responsavel: '',
+      valorNumerico: undefined,
+      valorTexto: '',
+      certificadoId: certId,
+      certificadoValidade: certValidade,
+      fotoUrl: undefined,
+      pendenciaResolvida: undefined,
+      fotoResolvidaUrl: undefined
+    };
+  });
+  return { initialRespostas, vencidos };
+};
+
 export const ChecklistPreenchimento: React.FC = () => {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
   const [metadata, setMetadata] = useState<any>(null);
   const [equipamento, setEquipamento] = useState<Equipamento | null>(null);
   const [modelo, setModelo] = useState<ChecklistModelo | null>(null);
@@ -39,22 +100,19 @@ export const ChecklistPreenchimento: React.FC = () => {
     valorTexto?: string;
     certificadoId?: string;
     certificadoValidade?: string;
-    fotoBase64?: string;
     fotoUrl?: string;
     pendenciaResolvida?: boolean;
-    fotoResolvidaBase64?: string;
     fotoResolvidaUrl?: string;
   }>>({});
   const [fotosEquipamento, setFotosEquipamento] = useState<(string | undefined)[]>([undefined, undefined, undefined]);
   const [materiaisDisponiveis, setMateriaisDisponiveis] = useState<Material[]>([]);
-  const [materiaisUtilizados, setMateriaisUtilizados] = useState<Omit<MaterialUtilizado, 'id' | 'inspecaoId'>[]>([]);
+  const [materiaisUtilizados, setMateriaisUtilizados] = useState<any[]>([]);
   
   // Wizard Navigation State
   const [currentStep, setCurrentStep] = useState(0);
   const [showRespMap, setShowRespMap] = useState<Record<string, boolean>>({});
   const autoAdvanceTimeoutRef = useRef<any>(null);
 
-  
   // Adição de materiais local state
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
   const [materialQty, setMaterialQty] = useState(1);
@@ -71,8 +129,13 @@ export const ChecklistPreenchimento: React.FC = () => {
   const [isDrawing, setIsDrawing] = useState(false);
 
   // Loading, Media Uploading and Video Recording State
+  const [loading, setLoading] = useState(true);
+  const [showLongLoadingMessage, setShowLongLoadingMessage] = useState(false);
+  const [error, setError] = useState('');
+  const [draftLoaded, setDraftLoaded] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [recordingVideo, setRecordingVideo] = useState(false);
+  const [savingCompleted, setSavingCompleted] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
 
   const handleUploadFile = async (file: File | Blob, filename: string): Promise<string> => {
@@ -137,74 +200,383 @@ export const ChecklistPreenchimento: React.FC = () => {
     }
   };
 
+  // Helper to sync draft to backend
+  const syncDraftToServer = async (draftId: string) => {
+    if (!navigator.onLine) return false;
+    try {
+      const raw = localStorage.getItem(`cme_draft_${draftId}`);
+      if (!raw) return false;
+      const draft = JSON.parse(raw);
 
+      const finalRespostas = Object.entries(draft.respostas).map(([itemId, value]: [string, any]) => ({
+        id: `resp-${itemId}-${Date.now()}`,
+        inspecaoId: draftId,
+        itemId,
+        status: value.status,
+        observacao: value.observacao ? maiusculas(value.observacao) : undefined,
+        responsavel: value.responsavel ? maiusculas(value.responsavel) : undefined,
+        valorNumerico: value.valorNumerico,
+        valorTexto: value.valorTexto ? maiusculas(value.valorTexto) : undefined,
+        certificadoId: value.certificadoId ? maiusculas(value.certificadoId) : undefined,
+        certificadoValidade: value.certificadoValidade || undefined,
+        fotoUrl: value.fotoUrl || undefined,
+        pendenciaResolvida: value.pendenciaResolvida !== undefined ? value.pendenciaResolvida : undefined,
+        fotoResolvidaUrl: value.fotoResolvidaUrl || undefined,
+      }));
+
+      const finalMateriais = draft.materiaisUtilizados.map((mat: any, idx: number) => ({
+        id: `mu-${idx}-${Date.now()}`,
+        inspecaoId: draftId,
+        materialId: mat.materialId,
+        quantidade: mat.quantidade,
+        observacao: mat.observacao || undefined,
+      }));
+
+      const inspecaoPayload: any = {
+        id: draftId,
+        equipamentoId: draft.metadata.equipamentoId,
+        tipo: draft.metadata.tipo,
+        data: new Date(draft.localUpdatedAt).toISOString(),
+        modeloId: draft.modeloId,
+        modeloVersao: draft.modeloVersao,
+        responsavelGeral: draft.metadata.responsavelGeral,
+        status: 'EM_ANDAMENTO',
+        observacoesGerais: draft.observacoesGerais ? maiusculas(draft.observacoesGerais) : undefined,
+        respostas: finalRespostas,
+        materiais: finalMateriais,
+        origem: draft.metadata.origem,
+        destino: draft.metadata.destino,
+        compressorUtilizado: draft.metadata.compressorUtilizado,
+        classificacao: draft.metadata.classificacao,
+        fotosUrls: draft.fotosEquipamento.filter((f: any): f is string => !!f),
+      };
+
+      await api.inspecoes.upsert(draftId, inspecaoPayload);
+
+      // On success, mark clean
+      draft.dirty = false;
+      localStorage.setItem(`cme_draft_${draftId}`, JSON.stringify(draft));
+      return true;
+    } catch (err) {
+      console.warn('Failed to sync draft to server:', err);
+      return false;
+    }
+  };
+
+  const sendBeaconSync = (draftId: string) => {
+    try {
+      const raw = localStorage.getItem(`cme_draft_${draftId}`);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (!draft.dirty) return;
+
+      const finalRespostas = Object.entries(draft.respostas).map(([itemId, value]: [string, any]) => ({
+        id: `resp-${itemId}-${Date.now()}`,
+        inspecaoId: draftId,
+        itemId,
+        status: value.status,
+        observacao: value.observacao ? maiusculas(value.observacao) : undefined,
+        responsavel: value.responsavel ? maiusculas(value.responsavel) : undefined,
+        valorNumerico: value.valorNumerico,
+        valorTexto: value.valorTexto ? maiusculas(value.valorTexto) : undefined,
+        certificadoId: value.certificadoId ? maiusculas(value.certificadoId) : undefined,
+        certificadoValidade: value.certificadoValidade || undefined,
+        fotoUrl: value.fotoUrl || undefined,
+        pendenciaResolvida: value.pendenciaResolvida !== undefined ? value.pendenciaResolvida : undefined,
+        fotoResolvidaUrl: value.fotoResolvidaUrl || undefined,
+      }));
+
+      const finalMateriais = draft.materiaisUtilizados.map((mat: any, idx: number) => ({
+        id: `mu-${idx}-${Date.now()}`,
+        inspecaoId: draftId,
+        materialId: mat.materialId,
+        quantidade: mat.quantidade,
+        observacao: mat.observacao || undefined,
+      }));
+
+      const inspecaoPayload: any = {
+        id: draftId,
+        equipamentoId: draft.metadata.equipamentoId,
+        tipo: draft.metadata.tipo,
+        data: new Date(draft.localUpdatedAt).toISOString(),
+        modeloId: draft.modeloId,
+        modeloVersao: draft.modeloVersao,
+        responsavelGeral: draft.metadata.responsavelGeral,
+        status: 'EM_ANDAMENTO',
+        observacoesGerais: draft.observacoesGerais ? maiusculas(draft.observacoesGerais) : undefined,
+        respostas: finalRespostas,
+        materiais: finalMateriais,
+        origem: draft.metadata.origem,
+        destino: draft.metadata.destino,
+        compressorUtilizado: draft.metadata.compressorUtilizado,
+        classificacao: draft.metadata.classificacao,
+        fotosUrls: draft.fotosEquipamento.filter((f: any): f is string => !!f),
+      };
+
+      const url = `${getBaseUrl()}/api/inspecoes/${encodeURIComponent(draftId)}`;
+      const token = localStorage.getItem('cme_token');
+      const urlWithToken = token ? `${url}?token=${encodeURIComponent(token)}` : url;
+      const blob = new Blob([JSON.stringify(inspecaoPayload)], { type: 'application/json' });
+      navigator.sendBeacon(urlWithToken, blob);
+    } catch (e) {
+      console.error('sendBeacon failed', e);
+    }
+  };
+
+  // Load long-loading indicator timer
   useEffect(() => {
-    // 1. Carregar metadados da sessão
-    const metaRaw = window.sessionStorage.getItem('cme_nova_inspecao_meta');
-    if (!metaRaw) {
+    let t: any;
+    if (loading) {
+      t = setTimeout(() => {
+        setShowLongLoadingMessage(true);
+      }, 3000);
+    } else {
+      setShowLongLoadingMessage(false);
+    }
+    return () => clearTimeout(t);
+  }, [loading]);
+
+  // 1. Load/resume draft and bootstrap cache-first
+  useEffect(() => {
+    if (!id) {
       navigate('/');
       return;
     }
-    const meta = JSON.parse(metaRaw);
-    setMetadata(meta);
 
-    // 2. Carregar Equipamento (com certificados, para pré-preenchimento)
-    api.equipamentos.get(meta.equipamentoId).then(eq => {
-      if (eq) {
-        setEquipamento(eq);
-        const certs = eq.certificados || [];
-        const certEslinga = certs.find(c => (c.tipo || '').toUpperCase() === 'ESLINGA');
-        const certEquip = certs.find(c => (c.tipo || '').toUpperCase() === 'EQUIPAMENTO');
-        const agora = new Date();
+    const loadDraftAndBootstrap = async () => {
+      setLoading(true);
+      setError('');
 
-        // 3. Carregar Modelo correspondente
-        api.modelos.getPorTipo(eq.tipo).then(mod => {
-          if (mod) {
-            setModelo(mod);
-            const initialRespostas: typeof respostas = {};
-            const vencidos: Record<string, boolean> = {};
-            mod.itens?.forEach(item => {
-              let certId = '';
-              let certValidade = '';
-              if (item.tipo === 'CERTIFICADO') {
-                // Lingada usa o certificado da eslinga; demais usam o certificado do equipamento.
-                const cert = /LINGADA/i.test(item.descricao) ? certEslinga : certEquip;
-                if (cert) {
-                  certId = cert.numero || '';
-                  certValidade = fmtBR(cert.validade);
-                  if (cert.validade && new Date(cert.validade) < agora) vencidos[item.id] = true;
-                }
-              }
-              initialRespostas[item.id] = {
-                status: undefined,
-                observacao: '',
-                responsavel: '',
-                valorNumerico: undefined,
-                valorTexto: '',
-                certificadoId: certId,
-                certificadoValidade: certValidade,
-                fotoBase64: undefined,
-                fotoUrl: undefined,
-                pendenciaResolvida: undefined,
-                fotoResolvidaBase64: undefined,
-                fotoResolvidaUrl: undefined
-              };
-            });
+      const rawDraft = localStorage.getItem(`cme_draft_${id}`);
+      if (!rawDraft) {
+        alert('Rascunho não encontrado.');
+        navigate('/');
+        return;
+      }
+
+      let draft: DraftLocal;
+      try {
+        draft = JSON.parse(rawDraft);
+      } catch (e) {
+        alert('Erro ao carregar rascunho corrompido.');
+        navigate('/');
+        return;
+      }
+
+      setMetadata(draft.metadata);
+      if (draft.currentStep !== undefined) setCurrentStep(draft.currentStep);
+      if (draft.observacoesGerais !== undefined) setObservacoesGerais(draft.observacoesGerais);
+      if (draft.fotosEquipamento !== undefined) setFotosEquipamento(draft.fotosEquipamento);
+      if (draft.materiaisUtilizados !== undefined) setMateriaisUtilizados(draft.materiaisUtilizados);
+      if (draft.respostas !== undefined) setRespostas(draft.respostas);
+
+      const eqId = draft.metadata.equipamentoId;
+      const eqTipo = draft.metadata.tipo;
+
+      const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 day
+      const isCacheValid = (key: string): boolean => {
+        const cached = localStorage.getItem(key);
+        if (!cached) return false;
+        try {
+          const { timestamp } = JSON.parse(cached);
+          return Date.now() - timestamp < CACHE_TTL;
+        } catch {
+          return false;
+        }
+      };
+
+      const getCached = (key: string) => {
+        const cached = localStorage.getItem(key);
+        if (!cached) return null;
+        try {
+          return JSON.parse(cached).data;
+        } catch {
+          return null;
+        }
+      };
+
+      let loadedEq: Equipamento | null = null;
+      let loadedModelo: ChecklistModelo | null = null;
+      let loadedMaterials: Material[] = [];
+
+      const isNewChecklist = !draft.modeloId;
+
+      if (isNewChecklist) {
+        const modelCacheKey = `cme_cache_modelo_${eqTipo}`;
+        const matsCacheKey = `cme_cache_materiais`;
+
+        const cacheValid = isCacheValid(modelCacheKey) && isCacheValid(matsCacheKey);
+        if (cacheValid) {
+          loadedModelo = getCached(modelCacheKey);
+          loadedMaterials = getCached(matsCacheKey);
+
+          try {
+            loadedEq = await api.equipamentos.get(eqId);
+          } catch (e) {
+            console.warn('Failed to fetch equipment details', e);
+          }
+
+          if (loadedModelo && loadedMaterials) {
+            setModelo(loadedModelo);
+            setMateriaisDisponiveis(loadedMaterials);
+            if (loadedMaterials.length > 0) setSelectedMaterialId(loadedMaterials[0].id);
+            
+            if (loadedEq) {
+              setEquipamento(loadedEq);
+              const { initialRespostas, vencidos } = initResponses(loadedModelo, loadedEq);
+              setRespostas(initialRespostas);
+              setCertVencido(vencidos);
+            }
+
+            draft.modeloId = loadedModelo.id;
+            draft.modeloVersao = loadedModelo.versao;
+            localStorage.setItem(`cme_draft_${id}`, JSON.stringify(draft));
+
+            setLoading(false);
+            setDraftLoaded(true);
+
+            api.checklist.bootstrap(eqId, eqTipo).then(data => {
+              localStorage.setItem(`cme_cache_modelo_${eqTipo}`, JSON.stringify({ data: data.modelo, timestamp: Date.now() }));
+              localStorage.setItem(`cme_cache_materiais`, JSON.stringify({ data: data.materiais, timestamp: Date.now() }));
+            }).catch(err => console.warn('Background bootstrap update failed', err));
+
+            return;
+          }
+        }
+
+        try {
+          const data = await api.checklist.bootstrap(eqId, eqTipo);
+          loadedEq = data.equipamento;
+          loadedModelo = data.modelo;
+          loadedMaterials = data.materiais;
+
+          if (loadedModelo) {
+            localStorage.setItem(`cme_cache_modelo_${eqTipo}`, JSON.stringify({ data: loadedModelo, timestamp: Date.now() }));
+          }
+          if (loadedMaterials) {
+            localStorage.setItem(`cme_cache_materiais`, JSON.stringify({ data: loadedMaterials, timestamp: Date.now() }));
+          }
+
+          setEquipamento(loadedEq);
+          setModelo(loadedModelo);
+          setMateriaisDisponiveis(loadedMaterials);
+          if (loadedMaterials && loadedMaterials.length > 0) setSelectedMaterialId(loadedMaterials[0].id);
+
+          if (loadedModelo && loadedEq) {
+            const { initialRespostas, vencidos } = initResponses(loadedModelo, loadedEq);
             setRespostas(initialRespostas);
             setCertVencido(vencidos);
-          }
-        });
-      }
-    });
 
-    // 4. Carregar Materiais para o seletor
-    api.materiais.list().then(mats => {
-      setMateriaisDisponiveis(mats);
-      if (mats.length > 0) {
-        setSelectedMaterialId(mats[0].id);
+            draft.modeloId = loadedModelo.id;
+            draft.modeloVersao = loadedModelo.versao;
+            localStorage.setItem(`cme_draft_${id}`, JSON.stringify(draft));
+          }
+
+          setLoading(false);
+          setDraftLoaded(true);
+        } catch (err: any) {
+          console.error('Checklist bootstrap failed', err);
+          setError(err.message || 'Erro de conexão com o servidor seguro.');
+          setLoading(false);
+        }
+      } else {
+        try {
+          const eqPromise = api.equipamentos.get(eqId).catch(() => null);
+          const modPromise = api.modelos.get(draft.modeloId).catch(() => {
+            const modelCacheKey = `cme_cache_modelo_${eqTipo}`;
+            const cachedMod = getCached(modelCacheKey);
+            if (cachedMod && cachedMod.id === draft.modeloId) return cachedMod;
+            return null;
+          });
+          const matsPromise = api.materiais.list().catch(() => getCached('cme_cache_materiais') || []);
+
+          const [eq, mod, mats] = await Promise.all([eqPromise, modPromise, matsPromise]);
+
+          if (eq) setEquipamento(eq);
+          if (mod) setModelo(mod);
+          if (mats) {
+            setMateriaisDisponiveis(mats);
+            if (mats.length > 0 && !selectedMaterialId) setSelectedMaterialId(mats[0].id);
+          }
+
+          setLoading(false);
+          setDraftLoaded(true);
+        } catch (err: any) {
+          console.error('Loading locked checklist failed', err);
+          setError('Erro ao carregar rascunho de checklist iniciado.');
+          setLoading(false);
+        }
       }
-    });
-  }, [navigate]);
+    };
+
+    loadDraftAndBootstrap();
+  }, [id, navigate]);
+
+  // 2. Debounced save to localStorage
+  useEffect(() => {
+    if (!draftLoaded || !id || !metadata) return;
+
+    const t = setTimeout(() => {
+      const raw = localStorage.getItem(`cme_draft_${id}`);
+      let currentDraft: any = {};
+      if (raw) {
+        try { currentDraft = JSON.parse(raw); } catch { /* ignore */ }
+      }
+
+      // Strip out base64 images from responses before saving to localStorage
+      const cleanRespostas: Record<string, any> = {};
+      Object.entries(respostas).forEach(([itemId, value]) => {
+        const { fotoBase64, fotoResolvidaBase64, ...rest } = value as any;
+        cleanRespostas[itemId] = rest;
+      });
+
+      const updatedDraft = {
+        ...currentDraft,
+        id,
+        metadata,
+        respostas: cleanRespostas,
+        fotosEquipamento,
+        materiaisUtilizados,
+        observacoesGerais,
+        currentStep,
+        dirty: true, 
+        localUpdatedAt: new Date().toISOString(),
+      };
+
+      localStorage.setItem(`cme_draft_${id}`, JSON.stringify(updatedDraft));
+    }, 300);
+
+    return () => clearTimeout(t);
+  }, [respostas, fotosEquipamento, materiaisUtilizados, observacoesGerais, currentStep, draftLoaded, id, metadata]);
+
+  // 3. Sync draft to server on currentStep change
+  useEffect(() => {
+    if (!draftLoaded || !id) return;
+    syncDraftToServer(id);
+  }, [currentStep, draftLoaded, id]);
+
+  // 4. Sync draft to server on visibility change & pagehide
+  useEffect(() => {
+    if (!draftLoaded || !id) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        syncDraftToServer(id);
+      }
+    };
+
+    const handlePageHide = () => {
+      sendBeaconSync(id);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [draftLoaded, id]);
 
   // Canvas drawing event handlers
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -274,7 +646,6 @@ export const ChecklistPreenchimento: React.FC = () => {
     }));
   };
 
-
   // Resposta comments/observações changer
   const handleObsChange = (itemId: string, observacao: string) => {
     setRespostas(prev => ({
@@ -323,8 +694,6 @@ export const ChecklistPreenchimento: React.FC = () => {
     }));
   };
 
-
-
   // Add Material to usage list
   const handleAddMaterial = () => {
     if (!selectedMaterialId) return;
@@ -358,97 +727,104 @@ export const ChecklistPreenchimento: React.FC = () => {
     setMateriaisUtilizados(prev => prev.filter(m => m.materialId !== matId));
   };
 
-  // Save full Inspection
+  // Save full Inspection as completed
   const handleSaveChecklist = async () => {
-    if (!equipamento || !modelo) return;
+    if (!equipamento || !modelo || !id) return;
+    setSavingCompleted(true);
+    setError('');
 
-    // Obter assinatura e fazer upload
-    let assinaturaUrl: string | undefined;
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const blank = document.createElement('canvas');
-      blank.width = canvas.width;
-      blank.height = canvas.height;
-      if (canvas.toDataURL() !== blank.toDataURL()) {
-        try {
-          setUploadingFoto(true);
-          const blob = await new Promise<Blob>((resolve, reject) => {
-            canvas.toBlob((b) => {
-              if (b) resolve(b);
-              else reject(new Error('Canvas toBlob failed'));
-            }, 'image/png');
-          });
-          assinaturaUrl = await handleUploadFile(blob, `assinatura-${Date.now()}.png`);
-        } catch (e) {
-          console.error('Failed to upload signature:', e);
-          alert('Erro ao fazer upload da assinatura para o Google Drive.');
-          return;
-        } finally {
-          setUploadingFoto(false);
+    try {
+      let assinaturaUrl: string | undefined;
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const blank = document.createElement('canvas');
+        blank.width = canvas.width;
+        blank.height = canvas.height;
+        if (canvas.toDataURL() !== blank.toDataURL()) {
+          try {
+            setUploadingFoto(true);
+            const blob = await new Promise<Blob>((resolve, reject) => {
+              canvas.toBlob((b) => {
+                if (b) resolve(b);
+                else reject(new Error('Canvas toBlob failed'));
+              }, 'image/png');
+            });
+            assinaturaUrl = await handleUploadFile(blob, `assinatura-${Date.now()}.png`);
+          } catch (e) {
+            console.error('Failed to upload signature:', e);
+            alert('Erro ao fazer upload da assinatura para o Google Drive.');
+            setSavingCompleted(false);
+            return;
+          } finally {
+            setUploadingFoto(false);
+          }
         }
       }
+
+      const finalRespostas = Object.entries(respostas).map(([itemId, value]) => ({
+        id: `resp-${itemId}-${Date.now()}`,
+        inspecaoId: id,
+        itemId,
+        status: value.status,
+        observacao: value.observacao ? maiusculas(value.observacao) : undefined,
+        responsavel: value.responsavel ? maiusculas(value.responsavel) : undefined,
+        valorNumerico: value.valorNumerico,
+        valorTexto: value.valorTexto ? maiusculas(value.valorTexto) : undefined,
+        certificadoId: value.certificadoId ? maiusculas(value.certificadoId) : undefined,
+        certificadoValidade: value.certificadoValidade || undefined,
+        fotoUrl: value.fotoUrl || undefined,
+        pendenciaResolvida: value.pendenciaResolvida !== undefined ? value.pendenciaResolvida : undefined,
+        fotoResolvidaUrl: value.fotoResolvidaUrl || undefined,
+      }));
+
+      const finalMateriais = materiaisUtilizados.map((mat, idx) => ({
+        id: `mu-${idx}-${Date.now()}`,
+        inspecaoId: id,
+        materialId: mat.materialId,
+        quantidade: mat.quantidade,
+        observacao: mat.observacao || undefined,
+      }));
+
+      const novaInspecao: any = {
+        id,
+        equipamentoId: equipamento.id,
+        tipo: metadata.tipo,
+        data: new Date().toISOString(),
+        modeloId: modelo.id,
+        modeloVersao: modelo.versao,
+        responsavelGeral: metadata.responsavelGeral,
+        status: 'CONCLUIDA',
+        observacoesGerais: observacoesGerais ? maiusculas(observacoesGerais) : undefined,
+        assinaturaUrl: assinaturaUrl || undefined,
+        respostas: finalRespostas,
+        materiais: finalMateriais,
+        origem: metadata.origem,
+        destino: metadata.destino,
+        compressorUtilizado: metadata.compressorUtilizado,
+        classificacao: metadata.classificacao,
+        fotosUrls: fotosEquipamento.filter((f): f is string => !!f),
+      };
+
+      await api.inspecoes.upsert(id, novaInspecao);
+
+      localStorage.removeItem(`cme_draft_${id}`);
+      const draftsRaw = localStorage.getItem('cme_drafts');
+      const drafts: string[] = draftsRaw ? JSON.parse(draftsRaw) : [];
+      const updatedDrafts = drafts.filter((d) => d !== id);
+      localStorage.setItem('cme_drafts', JSON.stringify(updatedDrafts));
+
+      alert('Inspeção concluída com sucesso e enviada ao servidor! ✅');
+      navigate('/');
+    } catch (err: any) {
+      console.error('Failed to conclude checklist:', err);
+      setError(err.message || 'Falha ao conectar com o servidor. A inspeção foi mantida como rascunho local.');
+      alert('Falha no envio final. A inspeção permanecerá salva no seu painel como rascunho para re-envio.');
+      setSavingCompleted(false);
     }
-
-    const inspecaoId = `insp-${Date.now()}`;
-
-    // Mapear respostas estruturadas para o tipo
-    const finalRespostas: RespostaItem[] = Object.entries(respostas).map(([itemId, value]) => ({
-      id: `resp-${itemId}-${Date.now()}`,
-      inspecaoId,
-      itemId,
-      status: value.status,
-      observacao: maiusculas(value.observacao),
-      responsavel: maiusculas(value.responsavel),
-      valorNumerico: value.valorNumerico,
-      valorTexto: maiusculas(value.valorTexto),
-      certificadoId: maiusculas(value.certificadoId),
-      certificadoValidade: value.certificadoValidade || undefined,
-      fotoUrl: value.fotoUrl || undefined,
-      pendenciaResolvida: value.pendenciaResolvida !== undefined ? value.pendenciaResolvida : undefined,
-      fotoResolvidaUrl: value.fotoResolvidaUrl || undefined,
-    }));
-
-    // Mapear materiais
-    const finalMateriais: MaterialUtilizado[] = materiaisUtilizados.map((mat, idx) => ({
-      id: `mu-${idx}-${Date.now()}`,
-      inspecaoId,
-      materialId: mat.materialId,
-      quantidade: mat.quantidade,
-      observacao: mat.observacao || undefined,
-    }));
-
-    const novaInspecao: Inspecao = {
-      id: inspecaoId,
-      equipamentoId: equipamento.id,
-      tipo: metadata.tipo,
-      data: new Date().toISOString(),
-      modeloId: modelo.id,
-      modeloVersao: modelo.versao,
-      responsavelGeral: metadata.responsavelGeral,
-      status: 'CONCLUIDA',
-      observacoesGerais: maiusculas(observacoesGerais),
-      assinaturaUrl: assinaturaUrl || undefined,
-      respostas: finalRespostas,
-      materiais: finalMateriais,
-      origem: metadata.origem,
-      destino: metadata.destino,
-      compressorUtilizado: metadata.compressorUtilizado,
-      classificacao: metadata.classificacao,
-      fotosEquipamento: fotosEquipamento.filter((f): f is string => !!f)
-    };
-
-    await api.inspecoes.save(novaInspecao);
-    
-    window.sessionStorage.removeItem('cme_nova_inspecao_meta');
-    alert('Inspeção concluída com sucesso e enviada ao servidor local! ✅');
-    navigate('/');
   };
 
   const handleBackToSelect = () => {
-    if (window.confirm('Deseja realmente voltar? As respostas preenchidas serão perdidas.')) {
-      window.sessionStorage.removeItem('cme_nova_inspecao_meta');
-      navigate('/');
-    }
+    navigate('/');
   };
 
   // Helper selectors for steps navigation
@@ -773,7 +1149,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     if (step.type === 'materials') {
       return (
         <div className="space-y-4 w-full">
-          <Card title="Materiais Consumidos no Teste" subtitle="Selecione e registre materiais utilizados no After Cooler">
+          <Card title="Materiais Consumidos no Teste" subtitle="Materiais utilizados">
             <div className="space-y-4">
               <div className="space-y-3">
                 <div>
@@ -1131,10 +1507,10 @@ export const ChecklistPreenchimento: React.FC = () => {
     if (step.type === 'observations') {
       return (
         <div className="space-y-4 w-full">
-          <Card title="Observações Gerais da Inspeção" subtitle="Comentários adicionais referentes ao teste ou condições do After Cooler">
+          <Card title="Observações Gerais da Inspeção" subtitle="Observações da inspeção">
             <textarea
               rows={6}
-              placeholder="Descreva observações gerais referentes ao teste dinâmico de troca de temperatura ou outros eventos operacionais..."
+              placeholder="Observações gerais (opcional)…"
               className="w-full p-3 border border-border rounded-lg text-xs bg-surface text-content placeholder:text-muted/70 outline-none focus:ring-2 focus:ring-accent/50"
               value={observacoesGerais}
               onChange={(e) => setObservacoesGerais(e.target.value)}
@@ -1148,7 +1524,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     if (step.type === 'signature') {
       return (
         <div className="space-y-5 w-full">
-          <Card title="Assinatura do Inspetor" subtitle="Assine abaixo para encerrar e certificar o checklist">
+          <Card title="Assinatura do Inspetor" subtitle="Assine para concluir">
             <div className="space-y-3">
               <div className="border border-border rounded-xl overflow-hidden bg-white shadow-inner relative">
                 <canvas

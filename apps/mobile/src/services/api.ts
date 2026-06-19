@@ -74,6 +74,8 @@ const api = {
   modelos: {
     getPorTipo: (tipo: string): Promise<ChecklistModelo | undefined> =>
       request<ChecklistModelo>(`/modelos/tipo/${encodeURIComponent(tipo)}`),
+    get: (id: string): Promise<ChecklistModelo> =>
+      request<ChecklistModelo>(`/modelos/${encodeURIComponent(id)}`),
   },
   materiais: {
     list: (): Promise<Material[]> => request<Material[]>('/materiais'),
@@ -81,9 +83,28 @@ const api = {
   inspecoes: {
     list: (): Promise<Inspecao[]> => request<Inspecao[]>('/inspecoes'),
     get: (id: string): Promise<Inspecao | undefined> => request<Inspecao>(`/inspecoes/${id}`),
+    getMine: (status?: string): Promise<Inspecao[]> =>
+      request<Inspecao[]>(`/inspecoes/mine${status ? `?status=${encodeURIComponent(status)}` : ''}`),
     save: async (inspecao: Inspecao): Promise<void> => {
       await request<void>('/inspecoes', { method: 'POST', body: JSON.stringify(inspecao) });
     },
+    upsert: (id: string, inspecao: Inspecao): Promise<Inspecao> =>
+      request<Inspecao>(`/inspecoes/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(inspecao),
+      }),
+  },
+  checklist: {
+    bootstrap: (equipamentoId: string, tipo: string): Promise<{
+      equipamento: Equipamento;
+      modelo: ChecklistModelo | null;
+      materiais: Material[];
+    }> =>
+      request<{
+        equipamento: Equipamento;
+        modelo: ChecklistModelo | null;
+        materiais: Material[];
+      }>(`/checklist/bootstrap?equipamentoId=${encodeURIComponent(equipamentoId)}&tipo=${encodeURIComponent(tipo)}`),
   },
   auth: {
     login: async (identifier: string, senha: string): Promise<User> => {
