@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, User, Settings2, ShieldCheck, MapPinIcon, Search, Check } from 'lucide-react';
-import { Card } from '../components/ui/Card';
+import { ArrowRight, User, Settings2, MapPinIcon, Search, Check } from 'lucide-react';
 import { Input } from '../components/ui/Input';
 import { AppHeader } from '../components/ui/AppHeader';
 import { cn } from '../lib/cn';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
 import { Equipamento, TipoInspecao, maiusculas } from '@cme/types';
+import { StepTray } from '../components/ui/StepTray';
 
 export const EquipamentoSelecao: React.FC = () => {
   const navigate = useNavigate();
@@ -16,21 +16,26 @@ export const EquipamentoSelecao: React.FC = () => {
   const [busca, setBusca] = useState('');
   const [autoSelectCodigo, setAutoSelectCodigo] = useState<string | null>(null);
   const [selectedEqId, setSelectedEqId] = useState('');
-  const [tipoInspecao, setTipoInspecao] = useState<TipoInspecao>('PRE_EMBARQUE');
-  const [showSearch, setShowSearch] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [selectedEq, setSelectedEq] = useState<Equipamento | null>(null);
+  const [tipoInspecao, setTipoInspecao] = useState<TipoInspecao | null>(null);
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
 
-  // Auto-focus input when search mode is active
+  const inputRef = useRef<HTMLInputElement>(null);
+  const step1Ref = useRef<HTMLDivElement>(null);
+  const step2Ref = useRef<HTMLDivElement>(null);
+  const step3Ref = useRef<HTMLDivElement>(null);
+
+  // Auto-focus input when Step 1 is active
   useEffect(() => {
-    if (showSearch || !selectedEqId) {
+    if (activeStep === 1) {
       const t = setTimeout(() => {
         inputRef.current?.focus();
       }, 50);
       return () => clearTimeout(t);
     }
-  }, [showSearch, selectedEqId]);
-  const [responsavel, setResponsavel] = useState('');
+  }, [activeStep]);
 
+  const [responsavel, setResponsavel] = useState('');
   const [compressorUtilizado, setCompressorUtilizado] = useState('');
   const [classificacao, setClassificacao] = useState<'NIVEL_1' | 'NIVEL_2' | 'REBUILD'>('NIVEL_1');
 
@@ -51,6 +56,10 @@ export const EquipamentoSelecao: React.FC = () => {
 
   // Busca inteligente (server-side) com debounce
   useEffect(() => {
+    if (busca.trim().length === 0 && !autoSelectCodigo) {
+      setEquipamentos([]);
+      return;
+    }
     const t = setTimeout(() => {
       api.equipamentos.list(busca.trim() || undefined).then((data) => {
         setEquipamentos(data);
@@ -58,15 +67,17 @@ export const EquipamentoSelecao: React.FC = () => {
           const found = data.find(
             (e) => e.codigo === autoSelectCodigo || e.codigoExibicao === autoSelectCodigo
           );
-          if (found) setSelectedEqId(found.id);
+          if (found) {
+            setSelectedEqId(found.id);
+            setSelectedEq(found);
+            setActiveStep(2);
+          }
           setAutoSelectCodigo(null);
         }
       });
     }, 250);
     return () => clearTimeout(t);
-  }, [busca]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const selectedEq = equipamentos.find((e) => e.id === selectedEqId);
+  }, [busca, autoSelectCodigo]);
 
   const generateUUID = () => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -82,6 +93,10 @@ export const EquipamentoSelecao: React.FC = () => {
     e.preventDefault();
     if (!selectedEqId) {
       alert('Selecione um equipamento para iniciar.');
+      return;
+    }
+    if (!tipoInspecao) {
+      alert('Selecione o tipo de inspeção.');
       return;
     }
 
@@ -124,6 +139,29 @@ export const EquipamentoSelecao: React.FC = () => {
     navigate(`/checklist/${inspecaoId}`);
   };
 
+  const scrollToStep = (stepIndex: number) => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const behavior = mediaQuery.matches ? 'auto' : 'smooth';
+
+    if (stepIndex === 1 && step1Ref.current) {
+      step1Ref.current.scrollIntoView({ behavior, block: 'nearest' });
+    } else if (stepIndex === 2 && step2Ref.current) {
+      step2Ref.current.scrollIntoView({ behavior, block: 'nearest' });
+    } else if (stepIndex === 3 && step3Ref.current) {
+      step3Ref.current.scrollIntoView({ behavior, block: 'nearest' });
+    }
+  };
+
+  const getTipoLabel = (tipo: TipoInspecao | null) => {
+    if (tipo === 'PRE_EMBARQUE') return 'Pré-Embarque';
+    if (tipo === 'OPERACIONAL') return 'Operacional';
+    if (tipo === 'RETORNO_EMBARQUE') return 'Retorno';
+    return '';
+  };
+
+  const step3Completed = responsavel.trim() !== '' && origem.trim() !== '' && destino.trim() !== '';
+  const allStepsDone = selectedEqId !== '' && tipoInspecao !== null && step3Completed;
+
   return (
     <div className="min-h-[100dvh] bg-bg text-content flex flex-col">
       <AppHeader title="CHECK LIST OPERACIONAL" subtitle="Inspeção de After Cooler" />
@@ -131,55 +169,33 @@ export const EquipamentoSelecao: React.FC = () => {
       <div className="flex-1 overflow-y-auto no-scrollbar">
         <div className="max-w-md mx-auto px-4 py-6 space-y-5 safe-bottom">
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Equipamento */}
-            <Card title="1. Equipamento">
-              <div className="space-y-3">
-                {selectedEq && !showSearch ? (
-                  // Estado Selecionado: exibe card limpo e botão "Alterar"
-                  <div className="bg-accent/10 border border-accent rounded-xl p-3 flex items-center justify-between">
-                    <div className="min-w-0">
-                      <span className="font-bold text-content block text-sm truncate">
-                        {selectedEq.codigoExibicao || selectedEq.codigo}
-                      </span>
-                      <span className="text-[10px] text-muted block uppercase font-bold tracking-wider mt-0.5">
-                        {selectedEq.tipo} · {selectedEq.localizacaoAtual || 'Sem localização'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowSearch(true);
-                        setBusca(''); // Limpa a busca ao reabrir para mostrar todos
-                      }}
-                      className="px-3 py-1.5 bg-accent text-white text-xs font-bold rounded-lg active:scale-95 transition min-h-[40px] whitespace-nowrap"
-                    >
-                      Alterar
-                    </button>
+            
+            {/* Step 1: Equipamento */}
+            <div ref={step1Ref}>
+              <StepTray
+                index={1}
+                title="Equipamento"
+                state={activeStep === 1 ? 'active' : (selectedEqId ? 'done' : 'active')}
+                summary={selectedEq ? `${selectedEq.codigoExibicao || selectedEq.codigo} · ${selectedEq.nome}` : undefined}
+                onEdit={() => setActiveStep(1)}
+                onAnimationComplete={() => {
+                  if (activeStep === 1) scrollToStep(1);
+                }}
+              >
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Input
+                      ref={inputRef}
+                      type="text"
+                      inputMode="search"
+                      placeholder="Buscar: CME-AFTE.001, afte 001, compressor..."
+                      icon={<Search className="h-4 w-4" />}
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                    />
                   </div>
-                ) : (
-                  // Estado de Busca: exibe input e a lista de resultados
-                  <>
-                    <div className="relative">
-                      <Input
-                        ref={inputRef}
-                        type="text"
-                        inputMode="search"
-                        placeholder="Buscar: CME-AFTE.001, afte 001, compressor..."
-                        icon={<Search className="h-4 w-4" />}
-                        value={busca}
-                        onChange={(e) => setBusca(e.target.value)}
-                      />
-                      {selectedEq && (
-                        <button
-                          type="button"
-                          onClick={() => setShowSearch(false)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-[10px] font-bold text-muted hover:text-content"
-                        >
-                          Cancelar
-                        </button>
-                      )}
-                    </div>
 
+                  {busca.trim().length > 0 && (
                     <div className="max-h-52 overflow-y-auto space-y-1.5 -mr-1 pr-1">
                       {equipamentos.length === 0 ? (
                         <p className="text-[11px] text-muted text-center py-4">Nenhum equipamento encontrado.</p>
@@ -198,7 +214,8 @@ export const EquipamentoSelecao: React.FC = () => {
                                 type="button"
                                 onClick={() => {
                                   setSelectedEqId(eq.id);
-                                  setShowSearch(false);
+                                  setSelectedEq(eq);
+                                  setActiveStep(2);
                                 }}
                                 className={cn(
                                   'w-full text-left px-3 py-3 rounded-xl border text-xs transition flex items-center justify-between gap-2 min-h-[48px]',
@@ -218,137 +235,166 @@ export const EquipamentoSelecao: React.FC = () => {
                         </AnimatePresence>
                       )}
                     </div>
-                  </>
-                )}
-              </div>
-            </Card>
-
-
-            {/* Tipo de Inspeção */}
-            <Card title="2. Tipo de Inspeção">
-              <div className="grid grid-cols-3 gap-2">
-                {(['PRE_EMBARQUE', 'OPERACIONAL', 'RETORNO_EMBARQUE'] as TipoInspecao[]).map(tipo => (
-                  <button
-                    key={tipo}
-                    type="button"
-                    onClick={() => setTipoInspecao(tipo)}
-                    className={cn(
-                      'py-3 px-1 rounded-xl text-xs font-bold text-center border transition-all duration-200 min-h-[48px]',
-                      tipoInspecao === tipo
-                        ? 'bg-accent border-accent text-white shadow-sm'
-                        : 'bg-surface border-border text-content hover:bg-surface-2'
-                    )}
-                  >
-                    {tipo === 'PRE_EMBARQUE' && 'Pré-Embarque'}
-                    {tipo === 'OPERACIONAL' && 'Operacional'}
-                    {tipo === 'RETORNO_EMBARQUE' && 'Retorno'}
-                  </button>
-                ))}
-              </div>
-            </Card>
-
-            {/* Informações de Campo */}
-            <Card title="3. Detalhes Operacionais">
-              <div className="space-y-4">
-                
-                {/* Responsável */}
-                <div>
-                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <User className="h-3.5 w-3.5 text-muted" />
-                    <span>Responsável Técnico</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-                    placeholder="Nome do inspetor"
-                    value={responsavel}
-                    onChange={(e) => setResponsavel(e.target.value)}
-                  />
+                  )}
                 </div>
+              </StepTray>
+            </div>
 
-
-
-                {/* Origem */}
-                <div>
-                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <MapPinIcon className="h-3.5 w-3.5 text-muted" />
-                    <span>Origem</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-                    placeholder="Base de Origem (Ex: Macaé)"
-                    value={origem}
-                    onChange={(e) => setOrigem(e.target.value)}
-                  />
+            {/* Step 2: Tipo de Inspeção */}
+            <div ref={step2Ref}>
+              <StepTray
+                index={2}
+                title="Tipo de Inspeção"
+                state={!selectedEqId ? 'idle' : (activeStep === 2 ? 'active' : (tipoInspecao !== null ? 'done' : 'active'))}
+                summary={tipoInspecao ? getTipoLabel(tipoInspecao) : undefined}
+                onEdit={() => setActiveStep(2)}
+                onAnimationComplete={() => {
+                  if (activeStep === 2) scrollToStep(2);
+                }}
+              >
+                <div className="grid grid-cols-3 gap-2">
+                  {(['PRE_EMBARQUE', 'OPERACIONAL', 'RETORNO_EMBARQUE'] as TipoInspecao[]).map(tipo => (
+                    <button
+                      key={tipo}
+                      type="button"
+                      onClick={() => {
+                        setTipoInspecao(tipo);
+                        setActiveStep(3);
+                      }}
+                      className={cn(
+                        'py-3 px-1 rounded-xl text-xs font-bold text-center border transition-all duration-200 min-h-[48px]',
+                        tipoInspecao === tipo
+                          ? 'bg-accent border-accent text-white shadow-sm'
+                          : 'bg-surface border-border text-content hover:bg-surface-2'
+                      )}
+                    >
+                      {tipo === 'PRE_EMBARQUE' && 'Pré-Embarque'}
+                      {tipo === 'OPERACIONAL' && 'Operacional'}
+                      {tipo === 'RETORNO_EMBARQUE' && 'Retorno'}
+                    </button>
+                  ))}
                 </div>
+              </StepTray>
+            </div>
 
-                {/* Destino */}
-                <div>
-                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <MapPinIcon className="h-3.5 w-3.5 text-muted" />
-                    <span>Destino</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-                    placeholder="Destino do Equipamento (Ex: P-55)"
-                    value={destino}
-                    onChange={(e) => setDestino(e.target.value)}
-                  />
-                </div>
+            {/* Step 3: Detalhes Operacionais */}
+            <div ref={step3Ref}>
+              <StepTray
+                index={3}
+                title="Detalhes Operacionais"
+                state={(!selectedEqId || tipoInspecao === null) ? 'idle' : (activeStep === 3 ? 'active' : (step3Completed ? 'done' : 'active'))}
+                summary={step3Completed ? `${responsavel} · ${origem} ➔ ${destino}` : undefined}
+                onEdit={() => setActiveStep(3)}
+                onAnimationComplete={() => {
+                  if (activeStep === 3) scrollToStep(3);
+                }}
+              >
+                <div className="space-y-4">
+                  {/* Responsável */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-muted" />
+                      <span>Responsável Técnico</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                      placeholder="Nome do inspetor"
+                      value={responsavel}
+                      onChange={(e) => setResponsavel(e.target.value)}
+                    />
+                  </div>
 
-                {/* Compressor */}
-                <div>
-                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Settings2 className="h-3.5 w-3.5 text-muted" />
-                    <span>Compressores Utilizados no Teste</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-                    placeholder="Ex: Sullair 750 (ID: CP-01)"
-                    value={compressorUtilizado}
-                    onChange={(e) => setCompressorUtilizado(e.target.value)}
-                  />
-                </div>
+                  {/* Origem */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <MapPinIcon className="h-3.5 w-3.5 text-muted" />
+                      <span>Origem</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                      placeholder="Base de Origem (Ex: Macaé)"
+                      value={origem}
+                      onChange={(e) => setOrigem(e.target.value)}
+                    />
+                  </div>
 
-                {/* Classificação */}
-                <div>
-                  <label className="block text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Classificação do Equipamento</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['NIVEL_1', 'NIVEL_2', 'REBUILD'] as const).map(classVal => (
-                      <button
-                        key={classVal}
-                        type="button"
-                        onClick={() => setClassificacao(classVal)}
-                        className={cn(
-                          'py-3 px-1 rounded-xl text-xs font-bold text-center border transition-all duration-200 min-h-[48px]',
-                          classificacao === classVal
-                            ? 'bg-accent border-accent text-white shadow-sm'
-                            : 'bg-surface border-border text-content hover:bg-surface-2'
-                        )}
-                      >
-                        {classVal.replace('_', ' ')}
-                      </button>
-                    ))}
+                  {/* Destino */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <MapPinIcon className="h-3.5 w-3.5 text-muted" />
+                      <span>Destino</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                      placeholder="Destino do Equipamento (Ex: P-55)"
+                      value={destino}
+                      onChange={(e) => setDestino(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Compressor */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <Settings2 className="h-3.5 w-3.5 text-muted" />
+                      <span>Compressores Utilizados no Teste</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-content placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                      placeholder="Ex: Sullair 750 (ID: CP-01)"
+                      value={compressorUtilizado}
+                      onChange={(e) => setCompressorUtilizado(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Classificação */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Classificação do Equipamento</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['NIVEL_1', 'NIVEL_2', 'REBUILD'] as const).map(classVal => (
+                        <button
+                          key={classVal}
+                          type="button"
+                          onClick={() => setClassificacao(classVal)}
+                          className={cn(
+                            'py-3 px-1 rounded-xl text-xs font-bold text-center border transition-all duration-200 min-h-[48px]',
+                            classificacao === classVal
+                              ? 'bg-accent border-accent text-white shadow-sm'
+                              : 'bg-surface border-border text-content hover:bg-surface-2'
+                          )}
+                        >
+                          {classVal.replace('_', ' ')}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-
-              </div>
-            </Card>
+              </StepTray>
+            </div>
 
             {/* Submit */}
-            <button
-              type="submit"
-              className="w-full flex items-center justify-center space-x-2 bg-accent text-white hover:bg-accent/90 shadow-sm py-3.5 rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
-            >
-              <span>Iniciar Preenchimento</span>
-              <ArrowRight className="h-5 w-5" />
-            </button>
+            <AnimatePresence>
+              {allStepsDone && (
+                <motion.button
+                  key="submit-btn"
+                  type="submit"
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="w-full flex items-center justify-center space-x-2 bg-accent text-white hover:bg-accent/90 shadow-sm py-3.5 rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
+                >
+                  <span>Iniciar Preenchimento</span>
+                  <ArrowRight className="h-5 w-5" />
+                </motion.button>
+              )}
+            </AnimatePresence>
           </form>
         </div>
       </div>

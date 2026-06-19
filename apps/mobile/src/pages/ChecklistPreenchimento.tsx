@@ -879,64 +879,79 @@ export const ChecklistPreenchimento: React.FC = () => {
   const steps = getSteps();
   const totalSteps = steps.length;
 
-  function goToNextStep(bypassValidation: boolean | any = false) {
+  const isStepComplete = (stepIndex: number): boolean => {
+    if (stepIndex < 0 || stepIndex >= steps.length) return false;
+    const step = steps[stepIndex];
+
+    if (step.type === 'item' && step.itemIndex !== undefined) {
+      const item = modelo?.itens?.[step.itemIndex];
+      if (!item) return false;
+      const resp = respostas[item.id];
+      const tipo = item.tipo || 'STATUS';
+      const exigeStatus = tipo === 'STATUS' || tipo === 'CERTIFICADO';
+
+      if (exigeStatus) {
+        if (!resp || !resp.status) {
+          return false;
+        }
+
+        // Certificado com status OK exige a validade (ID é opcional).
+        if (tipo === 'CERTIFICADO' && resp.status === 'OK') {
+          const hasVal = resp.certificadoValidade && resp.certificadoValidade.trim();
+          if (!hasVal) {
+            return false;
+          }
+        }
+
+        if (resp.status === 'PENDENTE' && (!resp.observacao || !resp.observacao.trim())) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    if (step.type === 'materials') {
+      return true;
+    }
+
+    if (step.type === 'pendencies') {
+      const pendingItems = modelo?.itens?.filter(it => respostas[it.id]?.status === 'PENDENTE') || [];
+      for (const item of pendingItems) {
+        const resp = respostas[item.id];
+        if (!resp) return false;
+        if (resp.pendenciaResolvida === undefined) {
+          return false;
+        }
+        // Toda pendência exige evidência (foto/vídeo), resolvida ou não.
+        if (!resp.fotoResolvidaUrl) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    if (step.type === 'equip_photos') {
+      return fotosEquipamento.every(f => !!f);
+    }
+
+    if (step.type === 'observations') {
+      return true;
+    }
+
+    if (step.type === 'signature') {
+      return true;
+    }
+
+    return true;
+  };
+
+  function goToNextStep() {
     if (autoAdvanceTimeoutRef.current) {
       clearTimeout(autoAdvanceTimeoutRef.current);
       autoAdvanceTimeoutRef.current = null;
     }
 
-    const step = steps[currentStep];
-    const shouldBypass = bypassValidation === true;
-    if (!shouldBypass && step.type === 'item' && step.itemIndex !== undefined) {
-      const item = modelo?.itens?.[step.itemIndex];
-      if (item) {
-        const resp = respostas[item.id];
-        const tipo = item.tipo || 'STATUS';
-        const exigeStatus = tipo === 'STATUS' || tipo === 'CERTIFICADO';
-
-        // MEDICAO/TEXTO não têm status — avanço livre (opcionais).
-        if (exigeStatus) {
-          if (!resp || !resp.status) {
-            alert('Por favor, selecione uma opção (OK, Pendente ou N/A) para este item antes de avançar.');
-            return;
-          }
-
-          // Certificado com status OK exige a validade (ID é opcional).
-          if (tipo === 'CERTIFICADO' && resp.status === 'OK') {
-            const hasVal = resp.certificadoValidade && resp.certificadoValidade.trim();
-            if (!hasVal) {
-              alert('Por favor, preencha a Validade do certificado para este item antes de avançar.');
-              return;
-            }
-          }
-
-          if (resp.status === 'PENDENTE' && (!resp.observacao || !resp.observacao.trim())) {
-            alert('Atenção: Ao marcar como Pendente, você deve detalhar o problema no campo de Observação.');
-            return;
-          }
-        }
-      }
-    } else if (step.type === 'pendencies') {
-      const pendingItems = modelo?.itens?.filter(it => respostas[it.id]?.status === 'PENDENTE') || [];
-      for (const item of pendingItems) {
-        const resp = respostas[item.id];
-        if (resp.pendenciaResolvida === undefined) {
-          alert(`Por favor, indique se a pendência do item "${item.descricao}" foi resolvida.`);
-          return;
-        }
-        // Toda pendência exige evidência (foto/vídeo), resolvida ou não.
-        if (!resp.fotoResolvidaUrl) {
-          alert(`Anexe a evidência (foto/vídeo) da pendência do item "${item.descricao}".`);
-          return;
-        }
-      }
-    } else if (step.type === 'equip_photos') {
-      const todasPreenchidas = fotosEquipamento.every(f => !!f);
-      if (!todasPreenchidas) {
-        alert('Por favor, anexe as 3 fotos obrigatórias do equipamento antes de prosseguir.');
-        return;
-      }
-    }
+    if (!isStepComplete(currentStep)) return;
 
     if (currentStep < totalSteps - 1) {
       setCurrentStep(currentStep + 1);
@@ -1599,7 +1614,8 @@ export const ChecklistPreenchimento: React.FC = () => {
       {/* Bottom Sticky Action Bar */}
       <div className="bg-surface border-t border-border p-4 shadow-lg flex-shrink-0 z-50 safe-bottom">
         <div className="max-w-md mx-auto flex items-center justify-between gap-3">
-          <button
+          <motion.button
+            layout
             type="button"
             onClick={goToPrevStep}
             disabled={currentStep === 0}
@@ -1607,29 +1623,45 @@ export const ChecklistPreenchimento: React.FC = () => {
           >
             <ChevronLeft className="h-4 w-4" />
             <span>Voltar</span>
-          </button>
+          </motion.button>
 
-          {currentStep === totalSteps - 1 ? (
-            <motion.button
-              type="button"
-              onClick={handleSaveChecklist}
-              whileTap={{ scale: 0.98 }}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold transition min-h-[48px]"
-            >
-              <Save className="h-4 w-4" />
-              <span>Finalizar</span>
-            </motion.button>
-          ) : (
-            <motion.button
-              type="button"
-              onClick={goToNextStep}
-              whileTap={{ scale: 0.98 }}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold transition min-h-[48px]"
-            >
-              <span>Avançar</span>
-              <ChevronRight className="h-4 w-4" />
-            </motion.button>
-          )}
+          <AnimatePresence>
+            {isStepComplete(currentStep) && (
+              currentStep === totalSteps - 1 ? (
+                <motion.button
+                  key="finalizar-btn"
+                  layout
+                  initial={{ opacity: 0, scale: 0.9, x: 20 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, x: 20 }}
+                  transition={{ duration: 0.18 }}
+                  type="button"
+                  onClick={handleSaveChecklist}
+                  whileTap={{ scale: 0.98 }}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold transition min-h-[48px]"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>Finalizar</span>
+                </motion.button>
+              ) : (
+                <motion.button
+                  key="avancar-btn"
+                  layout
+                  initial={{ opacity: 0, scale: 0.9, x: 20 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, x: 20 }}
+                  transition={{ duration: 0.18 }}
+                  type="button"
+                  onClick={() => goToNextStep()}
+                  whileTap={{ scale: 0.98 }}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold transition min-h-[48px]"
+                >
+                  <span>Avançar</span>
+                  <ChevronRight className="h-4 w-4" />
+                </motion.button>
+              )
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>
