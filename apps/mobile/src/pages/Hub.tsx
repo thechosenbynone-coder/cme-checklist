@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, ClipboardList, CheckCircle2, AlertTriangle, LogOut, Loader2, ArrowRight, RefreshCw, Clock } from 'lucide-react';
+import { Plus, ClipboardList, CheckCircle2, AlertTriangle, LogOut, Loader2, ArrowRight, RefreshCw, Clock, User } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { AppHeader } from '../components/ui/AppHeader';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
