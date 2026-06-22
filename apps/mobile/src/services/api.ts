@@ -72,6 +72,7 @@ const api = {
       request<Equipamento>(`/equipamentos/${encodeURIComponent(id)}`),
   },
   modelos: {
+    list: (): Promise<ChecklistModelo[]> => request<ChecklistModelo[]>('/modelos'),
     getPorTipo: (tipo: string): Promise<ChecklistModelo | undefined> =>
       request<ChecklistModelo>(`/modelos/tipo/${encodeURIComponent(tipo)}`),
     get: (id: string): Promise<ChecklistModelo> =>
