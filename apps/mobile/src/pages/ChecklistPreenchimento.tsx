@@ -6,7 +6,7 @@ import { Card } from '../components/ui/Card';
 import { StatusChip } from '../components/ui/StatusChip';
 import { AppHeader } from '../components/ui/AppHeader';
 import { cn } from '../lib/cn';
-import api, { getBaseUrl } from '../services/api';
+import api from '../services/api';
 import { Equipamento, ChecklistModelo, Material, StatusItem, maiusculas } from '@cme/types';
 
 // Formata ISO (YYYY-MM-DD...) para DD/MM/AAAA
@@ -46,6 +46,7 @@ interface DraftLocal {
   localUpdatedAt: string;
   modeloId: string;
   modeloVersao: number;
+  serverCreated?: boolean; // inspeção já criada no servidor (POST /iniciar)
 }
 
 // Pre-fill answers with equipment certifications if available
@@ -200,7 +201,27 @@ export const ChecklistPreenchimento: React.FC = () => {
     }
   };
 
-  // Helper to sync draft to backend
+  // Snapshot dos campos já enviados por item (para mandar só o que mudou).
+  const lastSyncedRef = useRef<Record<string, string>>({});
+
+  // Monta o payload granular de uma resposta (campos sempre explícitos:
+  // valor normalizado ou null, para que limpar um campo também sincronize).
+  const buildAlteracao = (itemId: string, value: any) => ({
+    itemId,
+    status: value.status ?? null,
+    observacao: maiusculas(value.observacao) ?? null,
+    responsavel: maiusculas(value.responsavel) ?? null,
+    valorNumerico: value.valorNumerico ?? null,
+    valorTexto: maiusculas(value.valorTexto) ?? null,
+    certificadoId: maiusculas(value.certificadoId) ?? null,
+    certificadoValidade: value.certificadoValidade || null,
+    pendenciaResolvida: value.pendenciaResolvida ?? null,
+    fotoUrl: value.fotoUrl || null,
+    fotoResolvidaUrl: value.fotoResolvidaUrl || null,
+  });
+
+  // Sync granular: garante a inspeção no servidor (POST /iniciar, idempotente)
+  // e envia via PATCH apenas os itens que mudaram desde o último sync.
   const syncDraftToServer = async (draftId: string) => {
     if (!navigator.onLine) return false;
     try {
@@ -208,118 +229,51 @@ export const ChecklistPreenchimento: React.FC = () => {
       if (!raw) return false;
       const draft = JSON.parse(raw);
 
-      const finalRespostas = Object.entries(draft.respostas).map(([itemId, value]: [string, any]) => ({
-        id: `resp-${itemId}-${Date.now()}`,
-        inspecaoId: draftId,
-        itemId,
-        status: value.status,
-        observacao: value.observacao ? maiusculas(value.observacao) : undefined,
-        responsavel: value.responsavel ? maiusculas(value.responsavel) : undefined,
-        valorNumerico: value.valorNumerico,
-        valorTexto: value.valorTexto ? maiusculas(value.valorTexto) : undefined,
-        certificadoId: value.certificadoId ? maiusculas(value.certificadoId) : undefined,
-        certificadoValidade: value.certificadoValidade || undefined,
-        fotoUrl: value.fotoUrl || undefined,
-        pendenciaResolvida: value.pendenciaResolvida !== undefined ? value.pendenciaResolvida : undefined,
-        fotoResolvidaUrl: value.fotoResolvidaUrl || undefined,
-      }));
+      if (!draft.serverCreated) {
+        await api.inspecoes.iniciar(draftId, {
+          equipamentoId: draft.metadata.equipamentoId,
+          tipo: draft.metadata.tipo,
+          modeloId: draft.modeloId || undefined,
+          modeloVersao: draft.modeloVersao || undefined,
+          responsavelGeral: draft.metadata.responsavelGeral || undefined,
+          origem: draft.metadata.origem || undefined,
+          destino: draft.metadata.destino || undefined,
+          compressorUtilizado: draft.metadata.compressorUtilizado || undefined,
+          classificacao: draft.metadata.classificacao || undefined,
+        });
+        draft.serverCreated = true;
+        localStorage.setItem(`cme_draft_${draftId}`, JSON.stringify(draft));
+      }
 
-      const finalMateriais = draft.materiaisUtilizados.map((mat: any, idx: number) => ({
-        id: `mu-${idx}-${Date.now()}`,
-        inspecaoId: draftId,
-        materialId: mat.materialId,
-        quantidade: mat.quantidade,
-        observacao: mat.observacao || undefined,
-      }));
+      const alteracoes: any[] = [];
+      const snaps: Record<string, string> = {};
+      for (const [itemId, value] of Object.entries(draft.respostas || {})) {
+        const payload = buildAlteracao(itemId, value);
+        // Ignora itens vazios nunca sincronizados (evita criar respostas em
+        // branco). Itens já sincronizados que ficaram vazios SÃO enviados
+        // (para limpar no servidor).
+        const { itemId: _omit, ...campos } = payload;
+        const temConteudo = Object.values(campos).some((v) => v !== null);
+        if (!temConteudo && lastSyncedRef.current[itemId] === undefined) continue;
 
-      const inspecaoPayload: any = {
-        id: draftId,
-        equipamentoId: draft.metadata.equipamentoId,
-        tipo: draft.metadata.tipo,
-        data: new Date(draft.localUpdatedAt).toISOString(),
-        modeloId: draft.modeloId,
-        modeloVersao: draft.modeloVersao,
-        responsavelGeral: draft.metadata.responsavelGeral,
-        status: 'EM_ANDAMENTO',
-        observacoesGerais: draft.observacoesGerais ? maiusculas(draft.observacoesGerais) : undefined,
-        respostas: finalRespostas,
-        materiais: finalMateriais,
-        origem: draft.metadata.origem,
-        destino: draft.metadata.destino,
-        compressorUtilizado: draft.metadata.compressorUtilizado,
-        classificacao: draft.metadata.classificacao,
-        fotosUrls: draft.fotosEquipamento.filter((f: any): f is string => !!f),
-      };
+        const snap = JSON.stringify(payload);
+        if (lastSyncedRef.current[itemId] !== snap) {
+          alteracoes.push(payload);
+          snaps[itemId] = snap;
+        }
+      }
 
-      await api.inspecoes.upsert(draftId, inspecaoPayload);
+      if (alteracoes.length > 0) {
+        await api.inspecoes.patchRespostas(draftId, alteracoes);
+        Object.assign(lastSyncedRef.current, snaps);
+      }
 
-      // On success, mark clean
       draft.dirty = false;
       localStorage.setItem(`cme_draft_${draftId}`, JSON.stringify(draft));
       return true;
     } catch (err) {
-      console.warn('Failed to sync draft to server:', err);
+      console.warn('Failed to sync draft (granular):', err);
       return false;
-    }
-  };
-
-  const sendBeaconSync = (draftId: string) => {
-    try {
-      const raw = localStorage.getItem(`cme_draft_${draftId}`);
-      if (!raw) return;
-      const draft = JSON.parse(raw);
-      if (!draft.dirty) return;
-
-      const finalRespostas = Object.entries(draft.respostas).map(([itemId, value]: [string, any]) => ({
-        id: `resp-${itemId}-${Date.now()}`,
-        inspecaoId: draftId,
-        itemId,
-        status: value.status,
-        observacao: value.observacao ? maiusculas(value.observacao) : undefined,
-        responsavel: value.responsavel ? maiusculas(value.responsavel) : undefined,
-        valorNumerico: value.valorNumerico,
-        valorTexto: value.valorTexto ? maiusculas(value.valorTexto) : undefined,
-        certificadoId: value.certificadoId ? maiusculas(value.certificadoId) : undefined,
-        certificadoValidade: value.certificadoValidade || undefined,
-        fotoUrl: value.fotoUrl || undefined,
-        pendenciaResolvida: value.pendenciaResolvida !== undefined ? value.pendenciaResolvida : undefined,
-        fotoResolvidaUrl: value.fotoResolvidaUrl || undefined,
-      }));
-
-      const finalMateriais = draft.materiaisUtilizados.map((mat: any, idx: number) => ({
-        id: `mu-${idx}-${Date.now()}`,
-        inspecaoId: draftId,
-        materialId: mat.materialId,
-        quantidade: mat.quantidade,
-        observacao: mat.observacao || undefined,
-      }));
-
-      const inspecaoPayload: any = {
-        id: draftId,
-        equipamentoId: draft.metadata.equipamentoId,
-        tipo: draft.metadata.tipo,
-        data: new Date(draft.localUpdatedAt).toISOString(),
-        modeloId: draft.modeloId,
-        modeloVersao: draft.modeloVersao,
-        responsavelGeral: draft.metadata.responsavelGeral,
-        status: 'EM_ANDAMENTO',
-        observacoesGerais: draft.observacoesGerais ? maiusculas(draft.observacoesGerais) : undefined,
-        respostas: finalRespostas,
-        materiais: finalMateriais,
-        origem: draft.metadata.origem,
-        destino: draft.metadata.destino,
-        compressorUtilizado: draft.metadata.compressorUtilizado,
-        classificacao: draft.metadata.classificacao,
-        fotosUrls: draft.fotosEquipamento.filter((f: any): f is string => !!f),
-      };
-
-      const url = `${getBaseUrl()}/api/inspecoes/${encodeURIComponent(draftId)}`;
-      const token = localStorage.getItem('cme_token');
-      const urlWithToken = token ? `${url}?token=${encodeURIComponent(token)}` : url;
-      const blob = new Blob([JSON.stringify(inspecaoPayload)], { type: 'application/json' });
-      navigator.sendBeacon(urlWithToken, blob);
-    } catch (e) {
-      console.error('sendBeacon failed', e);
     }
   };
 
@@ -561,32 +515,49 @@ export const ChecklistPreenchimento: React.FC = () => {
     return () => clearTimeout(t);
   }, [respostas, fotosEquipamento, materiaisUtilizados, observacoesGerais, currentStep, draftLoaded, id, metadata]);
 
-  // 3. Sync draft to server on currentStep change
+  // Semeia o snapshot de sync a partir de um rascunho já sincronizado
+  // (evita reenviar todos os itens ao reabrir um rascunho limpo).
   useEffect(() => {
     if (!draftLoaded || !id) return;
-    syncDraftToServer(id);
-  }, [currentStep, draftLoaded, id]);
+    try {
+      const raw = localStorage.getItem(`cme_draft_${id}`);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft.serverCreated && !draft.dirty && draft.respostas) {
+        Object.entries(draft.respostas).forEach(([itemId, value]) => {
+          lastSyncedRef.current[itemId] = JSON.stringify(buildAlteracao(itemId, value as any));
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [draftLoaded, id]);
 
-  // 4. Sync draft to server on visibility change & pagehide
+  // 3. Sync granular (debounce) quando as respostas mudam — salva campo a campo.
   useEffect(() => {
     if (!draftLoaded || !id) return;
+    const t = setTimeout(() => {
+      syncDraftToServer(id);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [respostas, draftLoaded, id]);
 
+  // 4. Flush imediato quando o app vai para segundo plano ou reconecta.
+  useEffect(() => {
+    if (!draftLoaded || !id) return;
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         syncDraftToServer(id);
       }
     };
-
-    const handlePageHide = () => {
-      sendBeaconSync(id);
+    const handleOnline = () => {
+      syncDraftToServer(id);
     };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('pagehide', handlePageHide);
-
+    window.addEventListener('online', handleOnline);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('online', handleOnline);
     };
   }, [draftLoaded, id]);
 

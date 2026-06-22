@@ -94,6 +94,18 @@ const api = {
         method: 'PUT',
         body: JSON.stringify(inspecao),
       }),
+    // Fase 1: cria a inspeção no servidor já no início (idempotente).
+    iniciar: (id: string, payload: Record<string, any>): Promise<Inspecao> =>
+      request<Inspecao>(`/inspecoes/${encodeURIComponent(id)}/iniciar`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    // Fase 1: gravação granular — só os campos que mudaram.
+    patchRespostas: (id: string, alteracoes: any[]): Promise<{ ok: boolean; updatedAt: string }> =>
+      request<{ ok: boolean; updatedAt: string }>(`/inspecoes/${encodeURIComponent(id)}/respostas`, {
+        method: 'PATCH',
+        body: JSON.stringify({ alteracoes }),
+      }),
   },
   checklist: {
     bootstrap: (equipamentoId: string, tipo: string): Promise<{
