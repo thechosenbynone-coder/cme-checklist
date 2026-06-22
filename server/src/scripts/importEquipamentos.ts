@@ -27,7 +27,7 @@ function statusLiberacaoInicial(validadeISO: string | null): string {
 
 async function main() {
   const planilha = process.env.PLANILHA_EQUIPAMENTOS || PLANILHA;
-  console.log(`📄 Lendo planilha: ${planilha}`);
+  console.log(`Lendo planilha: ${planilha}`);
   const { equipamentos, duplicados, porAba } = parseWorkbook(planilha);
 
   console.log('\n=== Resumo por aba (GERAL ignorada) ===');
@@ -36,7 +36,7 @@ async function main() {
   }
   console.log(`  TOTAL (após dedupe): ${equipamentos.length}`);
   if (duplicados.length) {
-    console.log(`  ⚠️ Códigos duplicados ignorados: ${[...new Set(duplicados)].join(', ')}`);
+    console.log(`  Códigos duplicados ignorados: ${[...new Set(duplicados)].join(', ')}`);
   }
 
   console.log('\n=== Amostra (3) ===');
@@ -101,7 +101,7 @@ async function main() {
         });
       }
     }
-    console.log(`\n✅ Importação concluída: ${criados} criados, ${atualizados} atualizados.`);
+    console.log(`\nImportação concluída: ${criados} criados, ${atualizados} atualizados.`);
   } finally {
     await prisma.$disconnect();
   }
