@@ -66,3 +66,23 @@ export const modeloSchema = z.object({
   tipoEquipamento: z.string().min(1),
   itens: z.array(modeloItemSchema).min(1, 'O modelo precisa de ao menos um item.'),
 });
+
+// PATCH granular: cada alteração traz o itemId + apenas os campos que mudaram.
+// Campo ausente = não mexe; presente (mesmo null) = grava aquele valor.
+export const respostaPatchSchema = z.object({
+  itemId: z.string().min(1),
+  status: z.enum(['OK', 'PENDENTE', 'NAO_APLICAVEL']).nullish(),
+  observacao: z.string().nullish(),
+  responsavel: z.string().nullish(),
+  valorNumerico: z.number().nullish(),
+  valorTexto: z.string().nullish(),
+  certificadoId: z.string().nullish(),
+  certificadoValidade: z.string().nullish(),
+  pendenciaResolvida: z.boolean().nullish(),
+  fotoUrl: z.string().nullish(),
+  fotoResolvidaUrl: z.string().nullish(),
+});
+
+export const patchRespostasSchema = z.object({
+  alteracoes: z.array(respostaPatchSchema).min(1, 'Informe ao menos uma alteração.'),
+});
