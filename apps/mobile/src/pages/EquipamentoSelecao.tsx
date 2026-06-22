@@ -157,6 +157,7 @@ export const EquipamentoSelecao: React.FC = () => {
       localUpdatedAt: new Date().toISOString(),
       modeloId: '',
       modeloVersao: 0,
+      serverCreated: false,
     };
 
     localStorage.setItem(`cme_draft_${inspecaoId}`, JSON.stringify(initialDraft));
