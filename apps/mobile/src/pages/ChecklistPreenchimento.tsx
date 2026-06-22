@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Camera } from 'lucide-react';
+import { AlertTriangle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Camera, Pin, ChevronDown, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '../components/ui/Card';
 import { StatusChip } from '../components/ui/StatusChip';
@@ -113,6 +113,12 @@ export const ChecklistPreenchimento: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [showRespMap, setShowRespMap] = useState<Record<string, boolean>>({});
   const autoAdvanceTimeoutRef = useRef<any>(null);
+
+  // Piloto After Cooler: layout de cartões/seções. Acordeão (qual seção está
+  // aberta) e seções fixadas pelo usuário (só local, por aparelho — não muda
+  // nada no servidor nem para outros usuários).
+  const [openBloco, setOpenBloco] = useState<number | null>(null);
+  const [pins, setPins] = useState<string[]>([]);
 
   // Adição de materiais local state
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
@@ -532,6 +538,17 @@ export const ChecklistPreenchimento: React.FC = () => {
       /* ignore */
     }
   }, [draftLoaded, id]);
+
+  // Carrega as seções fixadas pelo usuário (local, por tipo de equipamento).
+  useEffect(() => {
+    if (!modelo) return;
+    try {
+      const raw = localStorage.getItem(`cme_pins_${modelo.tipoEquipamento || 'default'}`);
+      if (raw) setPins(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
+  }, [modelo]);
 
   // 3. Sync granular (debounce) quando as respostas mudam — salva campo a campo.
   useEffect(() => {
@@ -984,12 +1001,35 @@ export const ChecklistPreenchimento: React.FC = () => {
     if (blocos[i].stepIndex <= currentStep) currentBlocoIndex = i;
   }
 
+  // Piloto: layout de cartões/seções só no After Cooler (gate). Os demais
+  // checklists seguem no fluxo atual (wizard + dropdown), intactos.
+  const usarCards = (modelo?.tipoEquipamento || equipamento?.tipo) === 'After Cooler';
+
+  // Faixa de passos [start, end) de cada bloco/seção.
+  const blocoRange = (i: number): [number, number] => [
+    blocos[i].stepIndex,
+    i + 1 < blocos.length ? blocos[i + 1].stepIndex : totalSteps,
+  ];
+
+  const togglePin = (label: string) => {
+    setPins((prev) => {
+      const next = prev.includes(label) ? prev.filter((p) => p !== label) : [...prev, label];
+      try {
+        localStorage.setItem(`cme_pins_${modelo?.tipoEquipamento || 'default'}`, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
   const progressPercentage = totalSteps > 0 ? Math.round(((currentStep + 1) / totalSteps) * 100) : 0;
 
-  // Active step rendering logic
-  const renderStepContent = () => {
+  // Active step rendering logic (stepIndex permite reuso fora do wizard,
+  // ex.: na layout de cartões/seções do piloto After Cooler).
+  const renderStepContent = (stepIndex: number = currentStep) => {
     if (!modelo || steps.length === 0) return null;
-    const step = steps[currentStep];
+    const step = steps[stepIndex];
 
     // Checklist Item step
     if (step.type === 'item' && step.itemIndex !== undefined) {
@@ -1597,6 +1637,76 @@ export const ChecklistPreenchimento: React.FC = () => {
     return null;
   };
 
+  // Qual seção/cartão está aberto (acordeão). Default: o bloco do passo atual.
+  const blocoAberto = openBloco === null ? currentBlocoIndex : openBloco;
+
+  // Cartão de uma seção (piloto After Cooler): cabeçalho com progresso + pin,
+  // e, quando aberto, as perguntas daquela seção (reusa renderStepContent).
+  const renderBlocoCard = (i: number) => {
+    const b = blocos[i];
+    const [start, end] = blocoRange(i);
+    const aberto = blocoAberto === i;
+    const pinned = pins.includes(b.label);
+    const incluiUltimo = end >= totalSteps;
+    let doneCount = 0;
+    for (let s = start; s < end; s++) if (isStepComplete(s)) doneCount++;
+    const total = end - start;
+
+    return (
+      <div key={i} className={cn('bg-surface border rounded-2xl overflow-hidden', aberto ? 'border-accent' : 'border-border')}>
+        <div
+          role="button"
+          onClick={() => {
+            setOpenBloco(aberto ? -1 : i);
+            setCurrentStep(b.stepIndex);
+          }}
+          className="flex items-center gap-3 p-4 active:bg-surface-2 cursor-pointer min-h-[64px]"
+        >
+          <div className={cn(
+            'h-10 w-10 rounded-full grid place-items-center shrink-0 text-[10px] font-extrabold',
+            b.done ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+          )}>
+            {b.done ? <Check className="h-5 w-5" /> : `${doneCount}/${total}`}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm text-content leading-tight">{b.label}</p>
+            <p className="text-[11px] text-muted mt-0.5">{b.done ? 'Concluída' : `${doneCount} de ${total} preenchidos`}</p>
+          </div>
+          <button
+            type="button"
+            aria-label={pinned ? 'Desafixar seção' : 'Fixar seção no topo'}
+            onClick={(e) => { e.stopPropagation(); togglePin(b.label); }}
+            className={cn(
+              'h-11 w-11 rounded-xl grid place-items-center shrink-0 border transition',
+              pinned ? 'border-accent text-accent bg-accent/10' : 'border-border text-muted'
+            )}
+          >
+            <Pin className="h-5 w-5" />
+          </button>
+          <ChevronDown className={cn('h-5 w-5 text-muted shrink-0 transition-transform', aberto && 'rotate-180')} />
+        </div>
+
+        {aberto && (
+          <div className="px-4 pb-4 pt-4 space-y-4 border-t border-border">
+            {Array.from({ length: total }, (_, k) => start + k).map((s) => (
+              <div key={s}>{renderStepContent(s)}</div>
+            ))}
+            {incluiUltimo && (
+              <button
+                type="button"
+                onClick={handleSaveChecklist}
+                className="w-full flex items-center justify-center gap-1.5 py-3.5 text-sm bg-accent text-white hover:bg-accent/90 rounded-xl font-bold min-h-[52px] active:scale-[0.98] transition"
+              >
+                <Save className="h-4 w-4" />
+                <span>Finalizar inspeção</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="h-[100dvh] flex flex-col bg-bg text-content overflow-hidden select-none">
       {/* Header */}
@@ -1608,6 +1718,25 @@ export const ChecklistPreenchimento: React.FC = () => {
         progressLabel={`Passo ${currentStep + 1} de ${totalSteps}`}
       />
 
+      {usarCards ? (
+        <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
+          <div className="max-w-md w-full mx-auto space-y-5 pb-6">
+            {pins.length > 0 && (
+              <div className="space-y-2.5">
+                <p className="text-[11px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5 px-1">
+                  <Pin className="h-3.5 w-3.5" /> Fixadas por você
+                </p>
+                {blocos.map((b, i) => (pins.includes(b.label) ? renderBlocoCard(i) : null))}
+              </div>
+            )}
+            <div className="space-y-2.5">
+              <p className="text-[11px] font-bold text-muted uppercase tracking-wider px-1">Seções do checklist</p>
+              {blocos.map((b, i) => (pins.includes(b.label) ? null : renderBlocoCard(i)))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Navegação livre entre seções */}
       {blocos.length > 1 && (
         <div className="bg-surface border-b border-border px-4 py-2 flex-shrink-0">
@@ -1682,6 +1811,8 @@ export const ChecklistPreenchimento: React.FC = () => {
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };
