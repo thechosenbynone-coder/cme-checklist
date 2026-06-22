@@ -505,7 +505,7 @@ async function semearModelo(id: string, nome: string, tipoEquipamento: string, i
       unidade: it.unidade ?? null,
     })),
   });
-  console.log(`  ✓ ${nome} (${tipoEquipamento}) — ${itens.length} itens`);
+  console.log(`  ${nome} (${tipoEquipamento}) — ${itens.length} itens`);
 }
 
 async function main() {
@@ -513,7 +513,7 @@ async function main() {
   await semearModelo('mod-membrana', 'Checklist Operacional de Liberação de Membrana', 'Membrana', buildMembrana());
   await semearModelo('mod-compressor', 'Checklist Operacional de Liberação de Compressor Primário', 'Compressor', buildCompressor());
   await semearModelo('mod-booster', 'Checklist Operacional de Liberação de Booster', 'Booster', buildBooster());
-  console.log('Concluído! ✅');
+  console.log('Concluído!');
 }
 
 main()

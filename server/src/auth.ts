@@ -42,7 +42,7 @@ if (process.env.NODE_ENV === 'production' && _isWeak) {
   );
 } else if (_isWeak) {
   console.warn(
-    '[auth] ⚠️  JWT_SECRET fraco/padrão — aceito apenas em desenvolvimento. ' +
+    '[auth] JWT_SECRET fraco/padrão — aceito apenas em desenvolvimento. ' +
     'NÃO use este segredo em produção.'
   );
 }

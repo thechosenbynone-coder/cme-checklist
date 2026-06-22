@@ -116,7 +116,7 @@ async function main() {
     await prisma.material.create({ data: m });
   }
 
-  console.log('Database seeding complete! ✅');
+  console.log('Database seeding complete!');
 }
 
 main()
