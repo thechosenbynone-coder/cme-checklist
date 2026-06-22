@@ -928,29 +928,61 @@ export const ChecklistPreenchimento: React.FC = () => {
     return true;
   };
 
-  function goToNextStep() {
+  // Navegação livre: avança sem exigir que o passo atual esteja completo
+  // (a validação vira guia, não trava — setores diferentes preenchem partes
+  // diferentes). A obrigatoriedade real é checada só na conclusão.
+  const goToStep = (target: number) => {
     if (autoAdvanceTimeoutRef.current) {
       clearTimeout(autoAdvanceTimeoutRef.current);
       autoAdvanceTimeoutRef.current = null;
     }
-
-    if (!isStepComplete(currentStep)) return;
-
-    if (currentStep < totalSteps - 1) {
-      setCurrentStep(currentStep + 1);
-    }
-  }
-
-  const goToPrevStep = () => {
-    if (autoAdvanceTimeoutRef.current) {
-      clearTimeout(autoAdvanceTimeoutRef.current);
-      autoAdvanceTimeoutRef.current = null;
-    }
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
+    if (target >= 0 && target < totalSteps) {
+      setCurrentStep(target);
     }
   };
 
+  const goToNextStep = () => goToStep(currentStep + 1);
+  const goToPrevStep = () => goToStep(currentStep - 1);
+
+  // Blocos navegáveis: uma entrada por seção do checklist + uma por etapa
+  // final (materiais, pendências, fotos, observações, assinatura). `done`
+  // sinaliza pendência (guia, não trava).
+  const blocos = (() => {
+    const out: { label: string; stepIndex: number; done: boolean }[] = [];
+    let lastSecao: string | null = null;
+    steps.forEach((s, idx) => {
+      if (s.type === 'item' && s.itemIndex !== undefined) {
+        const secao = modelo?.itens?.[s.itemIndex]?.secao || 'ITENS';
+        if (secao !== lastSecao) {
+          out.push({ label: secao, stepIndex: idx, done: false });
+          lastSecao = secao;
+        }
+      } else {
+        out.push({ label: s.label, stepIndex: idx, done: false });
+        lastSecao = null;
+      }
+    });
+    // Um bloco está completo se todos os seus passos estão completos.
+    for (let i = 0; i < out.length; i++) {
+      const start = out[i].stepIndex;
+      const end = i + 1 < out.length ? out[i + 1].stepIndex : totalSteps;
+      let done = true;
+      for (let s = start; s < end; s++) {
+        if (!isStepComplete(s)) {
+          done = false;
+          break;
+        }
+      }
+      out[i].done = done;
+    }
+    return out;
+  })();
+
+  // Bloco atual = o de maior stepIndex que ainda é <= currentStep.
+  let currentBlocoIndex = 0;
+  for (let i = 0; i < blocos.length; i++) {
+    if (blocos[i].stepIndex <= currentStep) currentBlocoIndex = i;
+  }
 
   const progressPercentage = totalSteps > 0 ? Math.round(((currentStep + 1) / totalSteps) * 100) : 0;
 
@@ -1576,6 +1608,27 @@ export const ChecklistPreenchimento: React.FC = () => {
         progressLabel={`Passo ${currentStep + 1} de ${totalSteps}`}
       />
 
+      {/* Navegação livre entre seções */}
+      {blocos.length > 1 && (
+        <div className="bg-surface border-b border-border px-4 py-2 flex-shrink-0">
+          <div className="max-w-md mx-auto">
+            <label className="sr-only" htmlFor="bloco-nav">Ir para seção</label>
+            <select
+              id="bloco-nav"
+              value={currentBlocoIndex}
+              onChange={(e) => goToStep(blocos[Number(e.target.value)].stepIndex)}
+              className="w-full px-3 py-2 border border-border rounded-lg text-xs font-bold bg-surface-2 text-content outline-none focus:ring-2 focus:ring-accent/50"
+            >
+              {blocos.map((b, i) => (
+                <option key={i} value={i}>
+                  {i + 1}. {b.label}{b.done ? '' : ' (pendente)'}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col justify-center min-h-0 no-scrollbar">
         <div className="max-w-md w-full mx-auto">
@@ -1608,43 +1661,25 @@ export const ChecklistPreenchimento: React.FC = () => {
             <span>Voltar</span>
           </motion.button>
 
-          <AnimatePresence>
-            {isStepComplete(currentStep) && (
-              currentStep === totalSteps - 1 ? (
-                <motion.button
-                  key="finalizar-btn"
-                  layout
-                  initial={{ opacity: 0, scale: 0.9, x: 20 }}
-                  animate={{ opacity: 1, scale: 1, x: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, x: 20 }}
-                  transition={{ duration: 0.18 }}
-                  type="button"
-                  onClick={handleSaveChecklist}
-                  whileTap={{ scale: 0.98 }}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold transition min-h-[48px]"
-                >
-                  <Save className="h-4 w-4" />
-                  <span>Finalizar</span>
-                </motion.button>
-              ) : (
-                <motion.button
-                  key="avancar-btn"
-                  layout
-                  initial={{ opacity: 0, scale: 0.9, x: 20 }}
-                  animate={{ opacity: 1, scale: 1, x: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, x: 20 }}
-                  transition={{ duration: 0.18 }}
-                  type="button"
-                  onClick={() => goToNextStep()}
-                  whileTap={{ scale: 0.98 }}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold transition min-h-[48px]"
-                >
-                  <span>Avançar</span>
-                  <ChevronRight className="h-4 w-4" />
-                </motion.button>
-              )
-            )}
-          </AnimatePresence>
+          {currentStep === totalSteps - 1 ? (
+            <button
+              type="button"
+              onClick={handleSaveChecklist}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold transition min-h-[48px] active:scale-[0.98]"
+            >
+              <Save className="h-4 w-4" />
+              <span>Finalizar</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={goToNextStep}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold transition min-h-[48px] active:scale-[0.98]"
+            >
+              <span>Avançar</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>
