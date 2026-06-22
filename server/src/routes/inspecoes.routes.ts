@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireRole } from '../auth.js';
 import { registrarAuditoria } from '../lib/audit.js';
 import { calcularStatusLiberacao } from '../lib/equipamento.js';
-import { inspecaoSchema, patchRespostasSchema } from '../schemas.js';
+import { inspecaoSchema, patchRespostasSchema, iniciarInspecaoSchema } from '../schemas.js';
 
 export const inspecoesRouter = Router();
 
@@ -541,6 +541,72 @@ inspecoesRouter.patch('/api/inspecoes/:id/respostas', async (req, res) => {
     res.json({ ok: true, updatedAt: new Date().toISOString() });
   } catch (error: any) {
     console.error('Error patching respostas:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// POST /api/inspecoes/:id/iniciar — cria a inspeção no servidor já no início
+// (status EM_ANDAMENTO, sem respostas). Idempotente: se já existe, retorna-a.
+inspecoesRouter.post('/api/inspecoes/:id/iniciar', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const parsed = iniciarInspecaoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos.' });
+    }
+    const d = parsed.data;
+
+    const existing = await prisma.inspecao.findUnique({ where: { id } });
+    if (existing) return res.json(existing);
+
+    const numeroDocumento = `OPE-PC-03/${new Date().toISOString().slice(0, 10).replace(/-/g, '')}/${id.slice(-6).toUpperCase()}`;
+
+    const created = await prisma.inspecao.create({
+      data: {
+        id,
+        equipamentoId: d.equipamentoId,
+        tipo: d.tipo,
+        status: 'EM_ANDAMENTO',
+        numeroDocumento,
+        modeloId: d.modeloId || null,
+        modeloVersao: d.modeloVersao ?? null,
+        responsavelGeral: d.responsavelGeral,
+        origem: d.origem || null,
+        destino: d.destino || null,
+        compressorUtilizado: d.compressorUtilizado || null,
+        classificacao: d.classificacao || null,
+        createdById: req.user?.sub || null,
+      },
+    });
+
+    await registrarAuditoria(
+      req.user?.sub,
+      req.user?.nome,
+      'CRIAR_INSPECAO',
+      'INSPECAO',
+      created.id,
+      { status: created.status, numeroDocumento, iniciar: true }
+    );
+
+    res.status(201).json(created);
+  } catch (error: any) {
+    console.error('Error starting inspection:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// GET /api/inspecoes/:id/historico — timeline de alterações por campo (auditoria).
+inspecoesRouter.get('/api/inspecoes/:id/historico', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = await prisma.respostaHistorico.findMany({
+      where: { inspecaoId: id },
+      orderBy: { criadoEm: 'desc' },
+      take: 500,
+    });
+    res.json(data);
+  } catch (error: any) {
+    console.error('Error fetching inspection history:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
