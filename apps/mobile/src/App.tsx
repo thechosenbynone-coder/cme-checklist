@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Hub from './pages/Hub';
 import EquipamentoSelecao from './pages/EquipamentoSelecao';
 import ChecklistPreenchimento from './pages/ChecklistPreenchimento';
+import ChecklistRevisao from './pages/ChecklistRevisao';
 import api, { getBaseUrl } from './services/api';
 
 const BUNDLE_VERSION = '1.0.0';
@@ -89,6 +90,14 @@ export const App: React.FC = () => {
           element={
             <ProtectedRoute>
               <ChecklistPreenchimento />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inspecao/:id"
+          element={
+            <ProtectedRoute>
+              <ChecklistRevisao />
             </ProtectedRoute>
           }
         />

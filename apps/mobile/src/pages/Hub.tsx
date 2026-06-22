@@ -442,9 +442,10 @@ export const Hub: React.FC = () => {
                   {completedList.map(item => {
                     const isValidated = item.status === 'VALIDADA';
                     return (
-                      <div
+                      <button
                         key={item.id}
-                        className="bg-surface/75 border border-border/80 rounded-2xl p-4 flex items-center justify-between opacity-85 hover:opacity-100 transition-opacity"
+                        onClick={() => navigate(`/inspecao/${item.id}`)}
+                        className="w-full text-left bg-surface/75 border border-border/80 rounded-2xl p-4 flex items-center justify-between opacity-85 hover:opacity-100 hover:bg-surface-2 transition-all active:scale-[0.99] group"
                       >
                         <div className="space-y-1.5 min-w-0 pr-4">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -466,7 +467,8 @@ export const Hub: React.FC = () => {
                             <span>{fmtDate(item.updatedAt || item.data)}</span>
                           </div>
                         </div>
-                      </div>
+                        <ArrowRight className="h-4 w-4 text-muted group-hover:text-accent group-hover:translate-x-0.5 transition flex-shrink-0" />
+                      </button>
                     );
                   })}
                 </div>
