@@ -1,18 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  FileSpreadsheet, 
-  FileText, 
-  Search, 
-  TrendingUp, 
-  AlertTriangle, 
-  Wrench, 
+  FileSpreadsheet,
+  FileText,
+  Search,
+  AlertTriangle,
   CheckCircle,
   ExternalLink,
   PlusCircle,
   ShieldCheck,
   ArrowUpRight,
-  HelpCircle,
   Activity,
   ChevronDown
 } from 'lucide-react';
@@ -49,11 +46,6 @@ export const Dashboard: React.FC = () => {
   const pendenciasAtivasCount = inspecoes.filter(i => 
     i.respostas.some(r => r.status === 'PENDENTE' && r.pendenciaResolvida !== true)
   ).length;
-
-  const totalMateriaisUtilizados = inspecoes.reduce(
-    (total, insp) => total + insp.materiais.reduce((mTotal, m) => mTotal + m.quantidade, 0), 
-    0
-  );
 
   // Filters application
   const filteredInspecoes = inspecoes.filter(insp => {

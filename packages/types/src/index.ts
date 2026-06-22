@@ -128,6 +128,7 @@ export interface Inspecao {
   modeloVersao?: number;
   validadaPorId?: string;
   validadaEm?: string;
+  validadaPor?: { nome: string }; // relação carregada pelo servidor (GET /inspecoes/:id)
   responsavelGeral?: string;
   localizacao?: string;
   status: StatusInspecao;

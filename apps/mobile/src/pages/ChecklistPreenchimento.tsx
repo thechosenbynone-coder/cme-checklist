@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, AlertTriangle, HelpCircle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Camera, Loader2 } from 'lucide-react';
+import { AlertTriangle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Camera } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '../components/ui/Card';
-import { Input } from '../components/ui/Input';
 import { StatusChip } from '../components/ui/StatusChip';
 import { AppHeader } from '../components/ui/AppHeader';
 import { cn } from '../lib/cn';
 import api, { getBaseUrl } from '../services/api';
-import { Equipamento, ChecklistModelo, Material, Inspecao, RespostaItem, MaterialUtilizado, StatusItem, maiusculas } from '@cme/types';
+import { Equipamento, ChecklistModelo, Material, StatusItem, maiusculas } from '@cme/types';
 
 // Formata ISO (YYYY-MM-DD...) para DD/MM/AAAA
 const fmtBR = (iso?: string | null): string => {
@@ -131,12 +130,12 @@ export const ChecklistPreenchimento: React.FC = () => {
 
   // Loading, Media Uploading and Video Recording State
   const [loading, setLoading] = useState(true);
-  const [showLongLoadingMessage, setShowLongLoadingMessage] = useState(false);
-  const [error, setError] = useState('');
+  const [, setShowLongLoadingMessage] = useState(false);
+  const [, setError] = useState('');
   const [draftLoaded, setDraftLoaded] = useState(false);
-  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [, setUploadingFoto] = useState(false);
   const [recordingVideo, setRecordingVideo] = useState(false);
-  const [savingCompleted, setSavingCompleted] = useState(false);
+  const [, setSavingCompleted] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
 
   const handleUploadFile = async (file: File | Blob, filename: string): Promise<string> => {
