@@ -1,9 +1,8 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-  LayoutDashboard, 
-  ClipboardList, 
-  Plus, 
+  LayoutDashboard,
+  Plus,
   Wrench, 
   FileSpreadsheet, 
   HelpCircle, 
