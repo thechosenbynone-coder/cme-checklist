@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { codigoCanonico, normalizeChave, serialParaISO } from './parsePlanilha';
+import { codigoCanonico, normalizeChave, serialParaISO } from './parsePlanilha.js';
 
 describe('codigoCanonico', () => {
   it('descarta o que vem após "(" e normaliza para hífen-maiúsculo', () => {

@@ -19,6 +19,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "prisma:generate": "npm run prisma:generate --workspace=server",
     "prisma:migrate": "npm run prisma:migrate --workspace=server",
     "prisma:studio": "npm run prisma:studio --workspace=server"
