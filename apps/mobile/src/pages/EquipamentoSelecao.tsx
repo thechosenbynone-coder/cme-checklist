@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, User, Settings2, MapPinIcon, Search, Check } from 'lucide-react';
+import { ArrowRight, User, Settings2, MapPinIcon, Search, Check, ClipboardList, ChevronRight } from 'lucide-react';
 import { Input } from '../components/ui/Input';
 import { AppHeader } from '../components/ui/AppHeader';
 import { cn } from '../lib/cn';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
-import { Equipamento, TipoInspecao, maiusculas } from '@cme/types';
+import { Equipamento, ChecklistModelo, TipoInspecao, maiusculas } from '@cme/types';
 import { StepTray } from '../components/ui/StepTray';
 
 export const EquipamentoSelecao: React.FC = () => {
@@ -18,16 +18,34 @@ export const EquipamentoSelecao: React.FC = () => {
   const [selectedEqId, setSelectedEqId] = useState('');
   const [selectedEq, setSelectedEq] = useState<Equipamento | null>(null);
   const [tipoInspecao, setTipoInspecao] = useState<TipoInspecao | null>(null);
-  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4>(1);
+
+  // Modelos de checklist disponíveis + tipo escolhido (Passo 1)
+  const [modelos, setModelos] = useState<ChecklistModelo[]>([]);
+  const [tipoChecklist, setTipoChecklist] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const step1Ref = useRef<HTMLDivElement>(null);
   const step2Ref = useRef<HTMLDivElement>(null);
   const step3Ref = useRef<HTMLDivElement>(null);
+  const step4Ref = useRef<HTMLDivElement>(null);
 
-  // Auto-focus input when Step 1 is active
+  // Tipos de checklist distintos (versão ativa mais recente de cada tipo).
+  // A lista vem ordenada por tipoEquipamento asc, versao desc — o 1º ativo de cada tipo é o atual.
+  const tiposChecklist = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { tipo: string; nome: string; itens: number }[] = [];
+    for (const m of modelos) {
+      if (!m.ativo || seen.has(m.tipoEquipamento)) continue;
+      seen.add(m.tipoEquipamento);
+      out.push({ tipo: m.tipoEquipamento, nome: m.nome, itens: (m as any)._count?.itens ?? 0 });
+    }
+    return out;
+  }, [modelos]);
+
+  // Auto-focus na busca quando o passo de Equipamento (2) fica ativo
   useEffect(() => {
-    if (activeStep === 1) {
+    if (activeStep === 2) {
       const t = setTimeout(() => {
         inputRef.current?.focus();
       }, 50);
@@ -43,8 +61,9 @@ export const EquipamentoSelecao: React.FC = () => {
   const [origem, setOrigem] = useState('');
   const [destino, setDestino] = useState('');
 
-  // Responsável logado + pré-seleção via ?equip= (gerar checklist 1-clique)
+  // Carrega modelos disponíveis + responsável logado + pré-seleção via ?equip=
   useEffect(() => {
+    api.modelos.list().then(setModelos).catch(() => setModelos([]));
     const user = api.auth.currentUser();
     if (user) setResponsavel(user.nome);
     const equipParam = searchParams.get('equip');
@@ -54,30 +73,40 @@ export const EquipamentoSelecao: React.FC = () => {
     }
   }, [searchParams]);
 
-  // Busca inteligente (server-side) com debounce
+  // Pré-seleção 1-clique via ?equip=CODIGO: descobre o tipo do equipamento e pula direto.
   useEffect(() => {
-    if (busca.trim().length === 0 && !autoSelectCodigo) {
+    if (!autoSelectCodigo) return;
+    let cancel = false;
+    api.equipamentos.list(autoSelectCodigo).then((data) => {
+      if (cancel) return;
+      const found = data.find(
+        (e) => e.codigo === autoSelectCodigo || e.codigoExibicao === autoSelectCodigo
+      );
+      if (found) {
+        setTipoChecklist(found.tipo);
+        setSelectedEqId(found.id);
+        setSelectedEq(found);
+        setActiveStep(3);
+      }
+      setAutoSelectCodigo(null);
+    });
+    return () => { cancel = true; };
+  }, [autoSelectCodigo]);
+
+  // Busca de equipamentos (server-side, com debounce), restrita ao tipo de checklist escolhido.
+  useEffect(() => {
+    if (!tipoChecklist) {
       setEquipamentos([]);
       return;
     }
+    const q = busca.trim() || tipoChecklist; // sem texto: lista os equipamentos do tipo
     const t = setTimeout(() => {
-      api.equipamentos.list(busca.trim() || undefined).then((data) => {
-        setEquipamentos(data);
-        if (autoSelectCodigo) {
-          const found = data.find(
-            (e) => e.codigo === autoSelectCodigo || e.codigoExibicao === autoSelectCodigo
-          );
-          if (found) {
-            setSelectedEqId(found.id);
-            setSelectedEq(found);
-            setActiveStep(2);
-          }
-          setAutoSelectCodigo(null);
-        }
+      api.equipamentos.list(q).then((data) => {
+        setEquipamentos(data.filter((e) => e.tipo === tipoChecklist));
       });
     }, 250);
     return () => clearTimeout(t);
-  }, [busca, autoSelectCodigo]);
+  }, [busca, tipoChecklist]);
 
   const generateUUID = () => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -123,7 +152,7 @@ export const EquipamentoSelecao: React.FC = () => {
       currentStep: 0,
       dirty: true,
       localUpdatedAt: new Date().toISOString(),
-      modeloId: '', 
+      modeloId: '',
       modeloVersao: 0,
     };
 
@@ -142,14 +171,8 @@ export const EquipamentoSelecao: React.FC = () => {
   const scrollToStep = (stepIndex: number) => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     const behavior = mediaQuery.matches ? 'auto' : 'smooth';
-
-    if (stepIndex === 1 && step1Ref.current) {
-      step1Ref.current.scrollIntoView({ behavior, block: 'nearest' });
-    } else if (stepIndex === 2 && step2Ref.current) {
-      step2Ref.current.scrollIntoView({ behavior, block: 'nearest' });
-    } else if (stepIndex === 3 && step3Ref.current) {
-      step3Ref.current.scrollIntoView({ behavior, block: 'nearest' });
-    }
+    const ref = stepIndex === 1 ? step1Ref : stepIndex === 2 ? step2Ref : stepIndex === 3 ? step3Ref : step4Ref;
+    ref.current?.scrollIntoView({ behavior, block: 'nearest' });
   };
 
   const getTipoLabel = (tipo: TipoInspecao | null) => {
@@ -159,27 +182,82 @@ export const EquipamentoSelecao: React.FC = () => {
     return '';
   };
 
-  const step3Completed = responsavel.trim() !== '' && origem.trim() !== '' && destino.trim() !== '';
-  const allStepsDone = selectedEqId !== '' && tipoInspecao !== null && step3Completed;
+  const step4Completed = responsavel.trim() !== '' && origem.trim() !== '' && destino.trim() !== '';
+  const allStepsDone = tipoChecklist !== null && selectedEqId !== '' && tipoInspecao !== null && step4Completed;
 
   return (
     <div className="min-h-[100dvh] bg-bg text-content flex flex-col">
-      <AppHeader title="CHECK LIST OPERACIONAL" subtitle="Inspeção de After Cooler" />
+      <AppHeader title="CHECK LIST OPERACIONAL" subtitle={tipoChecklist ? `Inspeção de ${tipoChecklist}` : 'Selecione o checklist'} />
 
       <div className="flex-1 overflow-y-auto no-scrollbar">
         <div className="max-w-md mx-auto px-4 py-6 space-y-5 safe-bottom">
           <form onSubmit={handleSubmit} className="space-y-5">
-            
-            {/* Step 1: Equipamento */}
+
+            {/* Step 1: Tipo de Checklist */}
             <div ref={step1Ref}>
               <StepTray
                 index={1}
-                title="Equipamento"
-                state={activeStep === 1 ? 'active' : (selectedEqId ? 'done' : 'active')}
-                summary={selectedEq ? `${selectedEq.codigoExibicao || selectedEq.codigo} · ${selectedEq.nome}` : undefined}
+                title="Tipo de Checklist"
+                state={activeStep === 1 ? 'active' : (tipoChecklist ? 'done' : 'active')}
+                summary={tipoChecklist || undefined}
                 onEdit={() => setActiveStep(1)}
                 onAnimationComplete={() => {
                   if (activeStep === 1) scrollToStep(1);
+                }}
+              >
+                <div className="space-y-2">
+                  {tiposChecklist.length === 0 ? (
+                    <p className="text-[11px] text-muted text-center py-4">Carregando checklists disponíveis…</p>
+                  ) : (
+                    tiposChecklist.map(({ tipo, itens }) => {
+                      const sel = tipo === tipoChecklist;
+                      return (
+                        <button
+                          key={tipo}
+                          type="button"
+                          onClick={() => {
+                            if (tipo !== tipoChecklist) {
+                              // troca de tipo: limpa equipamento selecionado e busca
+                              setTipoChecklist(tipo);
+                              setSelectedEqId('');
+                              setSelectedEq(null);
+                              setBusca('');
+                            }
+                            setActiveStep(2);
+                          }}
+                          className={cn(
+                            'w-full text-left px-3 py-3 rounded-xl border text-xs transition flex items-center justify-between gap-2 min-h-[52px]',
+                            sel ? 'bg-accent/10 border-accent' : 'bg-surface border-border hover:bg-surface-2'
+                          )}
+                        >
+                          <span className="flex items-center gap-3 min-w-0">
+                            <span className="h-9 w-9 rounded-xl bg-accent/10 border border-accent/20 grid place-items-center text-accent shrink-0">
+                              <ClipboardList className="h-4.5 w-4.5" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="font-bold text-content block truncate">{tipo}</span>
+                              <span className="text-[10px] text-muted block truncate">{itens} itens de verificação</span>
+                            </span>
+                          </span>
+                          {sel ? <Check className="h-4 w-4 text-accent shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </StepTray>
+            </div>
+
+            {/* Step 2: Equipamento */}
+            <div ref={step2Ref}>
+              <StepTray
+                index={2}
+                title="Equipamento"
+                state={!tipoChecklist ? 'idle' : (activeStep === 2 ? 'active' : (selectedEqId ? 'done' : 'active'))}
+                summary={selectedEq ? `${selectedEq.codigoExibicao || selectedEq.codigo} · ${selectedEq.nome}` : undefined}
+                onEdit={() => setActiveStep(2)}
+                onAnimationComplete={() => {
+                  if (activeStep === 2) scrollToStep(2);
                 }}
               >
                 <div className="space-y-3">
@@ -188,68 +266,66 @@ export const EquipamentoSelecao: React.FC = () => {
                       ref={inputRef}
                       type="text"
                       inputMode="search"
-                      placeholder="Buscar: CME-AFTE.001, afte 001, compressor..."
+                      placeholder={tipoChecklist ? `Buscar ${tipoChecklist}: código, nome...` : 'Buscar equipamento...'}
                       icon={<Search className="h-4 w-4" />}
                       value={busca}
                       onChange={(e) => setBusca(e.target.value)}
                     />
                   </div>
 
-                  {busca.trim().length > 0 && (
-                    <div className="max-h-52 overflow-y-auto space-y-1.5 -mr-1 pr-1">
-                      {equipamentos.length === 0 ? (
-                        <p className="text-[11px] text-muted text-center py-4">Nenhum equipamento encontrado.</p>
-                      ) : (
-                        <AnimatePresence mode="popLayout">
-                          {equipamentos.map((eq) => {
-                            const sel = eq.id === selectedEqId;
-                            return (
-                              <motion.button
-                                key={eq.id}
-                                layout
-                                initial={{ opacity: 0, y: 6 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -6 }}
-                                transition={{ duration: 0.15 }}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedEqId(eq.id);
-                                  setSelectedEq(eq);
-                                  setActiveStep(2);
-                                }}
-                                className={cn(
-                                  'w-full text-left px-3 py-3 rounded-xl border text-xs transition flex items-center justify-between gap-2 min-h-[48px]',
-                                  sel
-                                    ? 'bg-accent/10 border-accent'
-                                    : 'bg-surface border-border hover:bg-surface-2'
-                                )}
-                              >
-                                <span className="min-w-0">
-                                  <span className="font-bold text-content block truncate">{eq.codigoExibicao || eq.codigo}</span>
-                                  <span className="text-[10px] text-muted block truncate">{eq.tipo} · {eq.localizacaoAtual || '—'}</span>
-                                </span>
-                                {sel && <Check className="h-4 w-4 text-accent shrink-0" />}
-                              </motion.button>
-                            );
-                          })}
-                        </AnimatePresence>
-                      )}
-                    </div>
-                  )}
+                  <div className="max-h-52 overflow-y-auto space-y-1.5 -mr-1 pr-1">
+                    {equipamentos.length === 0 ? (
+                      <p className="text-[11px] text-muted text-center py-4">Nenhum equipamento {tipoChecklist || ''} encontrado.</p>
+                    ) : (
+                      <AnimatePresence mode="popLayout">
+                        {equipamentos.map((eq) => {
+                          const sel = eq.id === selectedEqId;
+                          return (
+                            <motion.button
+                              key={eq.id}
+                              layout
+                              initial={{ opacity: 0, y: 6 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -6 }}
+                              transition={{ duration: 0.15 }}
+                              type="button"
+                              onClick={() => {
+                                setSelectedEqId(eq.id);
+                                setSelectedEq(eq);
+                                setActiveStep(3);
+                              }}
+                              className={cn(
+                                'w-full text-left px-3 py-3 rounded-xl border text-xs transition flex items-center justify-between gap-2 min-h-[48px]',
+                                sel
+                                  ? 'bg-accent/10 border-accent'
+                                  : 'bg-surface border-border hover:bg-surface-2'
+                              )}
+                            >
+                              <span className="min-w-0">
+                                <span className="font-bold text-content block truncate">{eq.codigoExibicao || eq.codigo}</span>
+                                <span className="text-[10px] text-muted block truncate">{eq.tipo} · {eq.localizacaoAtual || '—'}</span>
+                              </span>
+                              {sel && <Check className="h-4 w-4 text-accent shrink-0" />}
+                            </motion.button>
+                          );
+                        })}
+                      </AnimatePresence>
+                    )}
+                  </div>
                 </div>
               </StepTray>
             </div>
 
-            {/* Step 2: Tipo de Inspeção */}
-            <div ref={step2Ref}>
+            {/* Step 3: Tipo de Inspeção */}
+            <div ref={step3Ref}>
               <StepTray
-                index={2}
+                index={3}
                 title="Tipo de Inspeção"
-                state={!selectedEqId ? 'idle' : (activeStep === 2 ? 'active' : (tipoInspecao !== null ? 'done' : 'active'))}
+                state={(!tipoChecklist || !selectedEqId) ? 'idle' : (activeStep === 3 ? 'active' : (tipoInspecao !== null ? 'done' : 'active'))}
                 summary={tipoInspecao ? getTipoLabel(tipoInspecao) : undefined}
-                onEdit={() => setActiveStep(2)}
+                onEdit={() => setActiveStep(3)}
                 onAnimationComplete={() => {
-                  if (activeStep === 2) scrollToStep(2);
+                  if (activeStep === 3) scrollToStep(3);
                 }}
               >
                 <div className="grid grid-cols-3 gap-2">
@@ -259,7 +335,7 @@ export const EquipamentoSelecao: React.FC = () => {
                       type="button"
                       onClick={() => {
                         setTipoInspecao(tipo);
-                        setActiveStep(3);
+                        setActiveStep(4);
                       }}
                       className={cn(
                         'py-3 px-1 rounded-xl text-xs font-bold text-center border transition-all duration-200 min-h-[48px]',
@@ -277,16 +353,16 @@ export const EquipamentoSelecao: React.FC = () => {
               </StepTray>
             </div>
 
-            {/* Step 3: Detalhes Operacionais */}
-            <div ref={step3Ref}>
+            {/* Step 4: Detalhes Operacionais */}
+            <div ref={step4Ref}>
               <StepTray
-                index={3}
+                index={4}
                 title="Detalhes Operacionais"
-                state={(!selectedEqId || tipoInspecao === null) ? 'idle' : (activeStep === 3 ? 'active' : (step3Completed ? 'done' : 'active'))}
-                summary={step3Completed ? `${responsavel} · ${origem} ➔ ${destino}` : undefined}
-                onEdit={() => setActiveStep(3)}
+                state={(!tipoChecklist || !selectedEqId || tipoInspecao === null) ? 'idle' : (activeStep === 4 ? 'active' : (step4Completed ? 'done' : 'active'))}
+                summary={step4Completed ? `${responsavel} · ${origem} ➔ ${destino}` : undefined}
+                onEdit={() => setActiveStep(4)}
                 onAnimationComplete={() => {
-                  if (activeStep === 3) scrollToStep(3);
+                  if (activeStep === 4) scrollToStep(4);
                 }}
               >
                 <div className="space-y-4">
