@@ -43,6 +43,7 @@ model User {
   inspecoesCriadas     Inspecao[] @relation("InspecaoCriadaPor")
   inspecoesValidadas   Inspecao[] @relation("InspecaoValidadaPor")
   respostasRegistradas RespostaItem[] @relation("RespostaRegistradaPor")
+  respostasAtualizadas RespostaItem[] @relation("RespostaAtualizadaPor")
 }
 
 model Equipamento {
@@ -164,12 +165,36 @@ model RespostaItem {
   certificadoId   String?
   certificadoValidade String?
   pendenciaResolvida  Boolean?
+  updatedById String?           // último usuário logado que alterou a resposta
+  updatedAt   DateTime @updatedAt
 
   inspecao Inspecao     @relation(fields: [inspecaoId], references: [id], onDelete: Cascade)
   item     ItemChecklist @relation(fields: [itemId], references: [id])
   createdBy User?       @relation("RespostaRegistradaPor", fields: [createdById], references: [id])
+  updatedBy User?       @relation("RespostaAtualizadaPor", fields: [updatedById], references: [id])
 
   @@unique([inspecaoId, itemId])
+}
+
+// Histórico append-only de alterações de respostas (auditoria por campo).
+// Sem FKs (como AuditLog): registro denormalizado e imutável de "quem mudou
+// qual campo, de -> para, quando".
+model RespostaHistorico {
+  id            String   @id @default(uuid())
+  inspecaoId    String
+  itemId        String
+  secao         String?
+  campo         String   // status | valorNumerico | observacao | responsavel | ...
+  valorAnterior String?
+  valorNovo     String?
+  responsavelDeclarado String?  // texto livre de quem fez a conferência (RespostaItem.responsavel)
+  userId        String?  // usuário logado que efetuou a alteração
+  userNome      String?
+  criadoEm      DateTime @default(now())
+
+  @@index([inspecaoId])
+  @@index([inspecaoId, itemId])
+  @@index([criadoEm])
 }
 
 model Material {
