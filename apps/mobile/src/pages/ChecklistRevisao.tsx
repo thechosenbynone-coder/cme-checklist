@@ -313,7 +313,11 @@ export const ChecklistRevisao: React.FC = () => {
                   </h3>
                   <div className="grid grid-cols-3 gap-2">
                     {inspecao.fotosUrls.map((url, i) => (
-                      <img key={i} src={api.mediaUrl(url)} alt={`Foto ${i + 1}`} className="aspect-square object-cover rounded-lg border border-border" />
+                      isVideo(url) ? (
+                        <video key={i} src={api.mediaUrl(url)} controls className="aspect-square object-cover rounded-lg border border-border" />
+                      ) : (
+                        <img key={i} src={api.mediaUrl(url)} alt={`Evidência ${i + 1}`} className="aspect-square object-cover rounded-lg border border-border" />
+                      )
                     ))}
                   </div>
                 </div>

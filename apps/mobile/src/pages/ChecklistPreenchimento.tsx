@@ -376,7 +376,8 @@ export const ChecklistPreenchimento: React.FC = () => {
       // (Booster/Compressor/Membrana/After Cooler), não pelo tipo de inspeção.
       // Mantemos fallback para `metadata.tipo` apenas por compatibilidade com
       // rascunhos antigos (o servidor reforça usando eq.tipo de qualquer forma).
-      const eqTipo = draft.metadata.equipamentoTipo || draft.metadata.tipo;
+      const tipoConfiavel = draft.metadata.equipamentoTipo; // ausente = rascunho legado
+      const eqTipo = tipoConfiavel || draft.metadata.tipo;
 
       const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 day
       const isCacheValid = (key: string): boolean => {
@@ -410,7 +411,11 @@ export const ChecklistPreenchimento: React.FC = () => {
         const modelCacheKey = `cme_cache_modelo_${eqTipo}`;
         const matsCacheKey = `cme_cache_materiais`;
 
-        const cacheValid = isCacheValid(modelCacheKey) && isCacheValid(matsCacheKey);
+        // Rascunho legado (sem equipamentoTipo) cairia no fallback de tipo de
+        // inspeção, colidindo o cache do modelo entre equipamentos diferentes.
+        // Nesse caso ignoramos o cache de modelo e buscamos fresco no servidor
+        // (que resolve pelo eq.tipo correto).
+        const cacheValid = !!tipoConfiavel && isCacheValid(modelCacheKey) && isCacheValid(matsCacheKey);
         if (cacheValid) {
           loadedModelo = getCached(modelCacheKey);
           loadedMaterials = getCached(matsCacheKey);
@@ -455,7 +460,10 @@ export const ChecklistPreenchimento: React.FC = () => {
           loadedModelo = data.modelo;
           loadedMaterials = data.materiais;
 
-          if (loadedModelo) {
+          // Só persiste o cache do modelo quando o tipo de equipamento é
+          // confiável; rascunhos legados não devem gravar sob a chave de
+          // tipo de inspeção (evita colisão entre equipamentos diferentes).
+          if (loadedModelo && tipoConfiavel) {
             localStorage.setItem(`cme_cache_modelo_${eqTipo}`, JSON.stringify({ data: loadedModelo, timestamp: Date.now() }));
           }
           if (loadedMaterials) {
