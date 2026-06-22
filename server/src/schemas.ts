@@ -86,3 +86,16 @@ export const respostaPatchSchema = z.object({
 export const patchRespostasSchema = z.object({
   alteracoes: z.array(respostaPatchSchema).min(1, 'Informe ao menos uma alteração.'),
 });
+
+// Início server-side da inspeção (status EM_ANDAMENTO, sem respostas).
+export const iniciarInspecaoSchema = z.object({
+  equipamentoId: z.string().min(1),
+  tipo: z.enum(['PRE_EMBARQUE', 'OPERACIONAL', 'RETORNO_EMBARQUE']),
+  modeloId: z.string().nullish(),
+  modeloVersao: z.number().nullish(),
+  responsavelGeral: z.string().nullish(),
+  origem: z.string().nullish(),
+  destino: z.string().nullish(),
+  compressorUtilizado: z.string().nullish(),
+  classificacao: z.string().nullish(),
+});
