@@ -624,8 +624,14 @@ app.get('/api/checklist/bootstrap', async (req, res) => {
       return res.status(404).json({ error: 'Equipamento não encontrado.' });
     }
 
+    // O modelo de checklist é determinado pelo TIPO DO EQUIPAMENTO
+    // (Booster, Compressor, Membrana, After Cooler...) e não pelo tipo de
+    // inspeção (PRE_EMBARQUE/OPERACIONAL/RETORNO). O parâmetro `tipo` da query
+    // é o tipo de equipamento enviado pelo app; usamos `eq.tipo` como fallback
+    // autoritativo para rascunhos antigos que enviavam o tipo de inspeção.
+    const tipoEquipamento = eq.tipo || tipo;
     const model = await prisma.checklistModelo.findFirst({
-      where: { tipoEquipamento: tipo, ativo: true },
+      where: { tipoEquipamento, ativo: true },
       include: { itens: { orderBy: { ordem: 'asc' } } }
     });
 

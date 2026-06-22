@@ -29,6 +29,7 @@ interface DraftLocal {
   metadata: {
     equipamentoId: string;
     tipo: string;
+    equipamentoTipo?: string;
     responsavelGeral: string;
     compressorUtilizado?: string;
     classificacao?: string;
@@ -371,7 +372,11 @@ export const ChecklistPreenchimento: React.FC = () => {
       if (draft.respostas !== undefined) setRespostas(draft.respostas);
 
       const eqId = draft.metadata.equipamentoId;
-      const eqTipo = draft.metadata.tipo;
+      // O modelo de checklist é definido pelo TIPO DO EQUIPAMENTO
+      // (Booster/Compressor/Membrana/After Cooler), não pelo tipo de inspeção.
+      // Mantemos fallback para `metadata.tipo` apenas por compatibilidade com
+      // rascunhos antigos (o servidor reforça usando eq.tipo de qualquer forma).
+      const eqTipo = draft.metadata.equipamentoTipo || draft.metadata.tipo;
 
       const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 day
       const isCacheValid = (key: string): boolean => {

@@ -133,6 +133,9 @@ export const EquipamentoSelecao: React.FC = () => {
     const metadata = {
       equipamentoId: selectedEqId,
       tipo: tipoInspecao,
+      // Tipo do equipamento (Booster/Compressor/Membrana/After Cooler) — define
+      // qual modelo de checklist será carregado. Distinto de `tipo` (inspeção).
+      equipamentoTipo: (selectedEq?.tipo || tipoChecklist || '') as string,
       responsavelGeral: maiusculas(responsavel),
       compressorUtilizado: maiusculas(compressorUtilizado),
       classificacao,
