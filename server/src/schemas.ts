@@ -15,6 +15,7 @@ export const respostaSchema = z.object({
   valorTexto: z.string().nullish(),
   createdById: z.string().nullish(),
   fotoUrl: z.string().nullish(),
+  fotosUrls: z.array(z.string()).max(6).nullish(),
   fotoResolvidaUrl: z.string().nullish(),
   certificadoId: z.string().nullish(),
   certificadoValidade: z.string().nullish(),
@@ -80,6 +81,7 @@ export const respostaPatchSchema = z.object({
   certificadoValidade: z.string().nullish(),
   pendenciaResolvida: z.boolean().nullish(),
   fotoUrl: z.string().nullish(),
+  fotosUrls: z.array(z.string()).max(6).nullish(),
   fotoResolvidaUrl: z.string().nullish(),
 });
 

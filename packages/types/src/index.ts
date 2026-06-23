@@ -89,6 +89,7 @@ export interface RespostaItem {
   /** @deprecated Use fotoUrl instead */
   fotoBase64?: string; // Mantido por compatibilidade
   fotoUrl?: string; // URL do Drive (produção)
+  fotosUrls?: string[]; // evidências por pergunta (até 6)
   pendenciaResolvida?: boolean; // Se a pendência foi resolvida em campo
   /** @deprecated Use fotoResolvidaUrl instead */
   fotoResolvidaBase64?: string; // Foto da pendência resolvida

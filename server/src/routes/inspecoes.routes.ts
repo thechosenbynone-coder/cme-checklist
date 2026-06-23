@@ -18,6 +18,7 @@ const CAMPOS_RESPOSTA = [
   'certificadoValidade',
   'pendenciaResolvida',
   'fotoUrl',
+  'fotosUrls',
   'fotoResolvidaUrl',
 ] as const;
 
@@ -232,6 +233,7 @@ inspecoesRouter.put('/api/inspecoes/:id', async (req, res) => {
               valorTexto: r.valorTexto || null,
               createdById: r.createdById || null,
               fotoUrl: r.fotoUrl || null,
+              fotosUrls: r.fotosUrls || [],
               fotoResolvidaUrl: r.fotoResolvidaUrl || null,
               certificadoId: r.certificadoId || null,
               certificadoValidade: r.certificadoValidade || null,
@@ -245,6 +247,7 @@ inspecoesRouter.put('/api/inspecoes/:id', async (req, res) => {
               valorTexto: r.valorTexto || null,
               createdById: r.createdById || null,
               fotoUrl: r.fotoUrl || null,
+              fotosUrls: r.fotosUrls || [],
               fotoResolvidaUrl: r.fotoResolvidaUrl || null,
               certificadoId: r.certificadoId || null,
               certificadoValidade: r.certificadoValidade || null,
@@ -366,6 +369,7 @@ inspecoesRouter.post('/api/inspecoes', async (req, res) => {
             valorTexto: r.valorTexto || null,
             createdById: r.createdById || null,
             fotoUrl: r.fotoUrl || null,
+            fotosUrls: r.fotosUrls || [],
             fotoResolvidaUrl: r.fotoResolvidaUrl || null,
             certificadoId: r.certificadoId || null,
             certificadoValidade: r.certificadoValidade || null,
