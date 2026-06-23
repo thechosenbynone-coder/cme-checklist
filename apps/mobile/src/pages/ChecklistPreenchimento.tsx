@@ -1173,23 +1173,31 @@ export const ChecklistPreenchimento: React.FC = () => {
             </div>
           </Card>
 
-          {/* Status buttons — só STATUS e CERTIFICADO */}
-          {showStatus && (
-            <div className="grid grid-cols-3 gap-2">
-              <StatusChip status="OK" selected={resp.status === 'OK'} onClick={() => handleStatusChange(item.id, 'OK')} />
-              <StatusChip status="PENDENTE" selected={resp.status === 'PENDENTE'} onClick={() => handleStatusChange(item.id, 'PENDENTE')} />
-              <StatusChip status="NAO_APLICAVEL" selected={resp.status === 'NAO_APLICAVEL'} onClick={() => handleStatusChange(item.id, 'NAO_APLICAVEL')} />
-            </div>
-          )}
-
-          {/* Evidências (fotos) — opcional, 1 por toque, até 6 por pergunta */}
-          <Card>
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Evidências (fotos)</span>
-                <span className="text-[10px] font-bold text-muted">{resp.fotosUrls?.length || 0}/6</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
+          {/* Evidências — câmera centralizada abaixo da pergunta (1 por toque, até 6) */}
+          <div className="flex flex-col items-center gap-3">
+            {(resp.fotosUrls?.length || 0) < 6 && (
+              <label className="flex flex-col items-center gap-1.5 cursor-pointer active:scale-95 transition">
+                <span className="h-14 w-14 rounded-full bg-accent/10 border border-accent/30 grid place-items-center">
+                  <Camera className="h-7 w-7 text-accent" />
+                </span>
+                <span className="text-[10px] font-bold text-muted uppercase tracking-wider">
+                  {resp.fotosUrls?.length ? `Adicionar foto (${resp.fotosUrls.length}/6)` : 'Adicionar foto (opcional)'}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleAddFoto(item.id, f);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            )}
+            {(resp.fotosUrls?.length || 0) > 0 && (
+              <div className="flex flex-wrap justify-center gap-2">
                 {(resp.fotosUrls || []).map((url, idx) => (
                   <div key={idx} className="relative">
                     <img
@@ -1207,25 +1215,18 @@ export const ChecklistPreenchimento: React.FC = () => {
                     </button>
                   </div>
                 ))}
-                {(resp.fotosUrls?.length || 0) < 6 && (
-                  <label className="h-16 w-16 rounded-lg border border-dashed border-border bg-surface-2 flex items-center justify-center cursor-pointer active:scale-95 transition">
-                    <Camera className="h-6 w-6 text-accent" />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleAddFoto(item.id, f);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-                )}
               </div>
+            )}
+          </div>
+
+          {/* Status buttons — só STATUS e CERTIFICADO */}
+          {showStatus && (
+            <div className="grid grid-cols-3 gap-2">
+              <StatusChip status="OK" selected={resp.status === 'OK'} onClick={() => handleStatusChange(item.id, 'OK')} />
+              <StatusChip status="PENDENTE" selected={resp.status === 'PENDENTE'} onClick={() => handleStatusChange(item.id, 'PENDENTE')} />
+              <StatusChip status="NAO_APLICAVEL" selected={resp.status === 'NAO_APLICAVEL'} onClick={() => handleStatusChange(item.id, 'NAO_APLICAVEL')} />
             </div>
-          </Card>
+          )}
 
           {/* Observações e Responsável — não para TEXTO (o próprio campo é a observação) */}
           {!isTexto && (
