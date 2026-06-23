@@ -102,6 +102,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     certificadoId?: string;
     certificadoValidade?: string;
     fotoUrl?: string;
+    fotosUrls?: string[];
     pendenciaResolvida?: boolean;
     fotoResolvidaUrl?: string;
   }>>({});
@@ -223,6 +224,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     certificadoValidade: value.certificadoValidade || null,
     pendenciaResolvida: value.pendenciaResolvida ?? null,
     fotoUrl: value.fotoUrl || null,
+    fotosUrls: Array.isArray(value.fotosUrls) ? value.fotosUrls : [],
     fotoResolvidaUrl: value.fotoResolvidaUrl || null,
   });
 
@@ -259,7 +261,7 @@ export const ChecklistPreenchimento: React.FC = () => {
         // branco). Itens já sincronizados que ficaram vazios SÃO enviados
         // (para limpar no servidor).
         const { itemId: _omit, ...campos } = payload;
-        const temConteudo = Object.values(campos).some((v) => v !== null);
+        const temConteudo = Object.values(campos).some((v) => (Array.isArray(v) ? v.length > 0 : v !== null));
         if (!temConteudo && lastSyncedRef.current[itemId] === undefined) continue;
 
         const snap = JSON.stringify(payload);
@@ -694,6 +696,32 @@ export const ChecklistPreenchimento: React.FC = () => {
     }));
   };
 
+  // Evidência por pergunta: 1 foto por toque, máximo 6.
+  const handleAddFoto = async (itemId: string, file: File) => {
+    const atuais = respostas[itemId]?.fotosUrls || [];
+    if (atuais.length >= 6) {
+      alert('Máximo de 6 fotos por pergunta.');
+      return;
+    }
+    try {
+      const url = await handleUploadFile(file, `evidencia-${itemId}-${Date.now()}.jpg`);
+      setRespostas(prev => {
+        const cur = prev[itemId]?.fotosUrls || [];
+        if (cur.length >= 6) return prev;
+        return { ...prev, [itemId]: { ...prev[itemId], fotosUrls: [...cur, url] } };
+      });
+    } catch {
+      /* handleUploadFile já alerta o usuário */
+    }
+  };
+
+  const handleRemoveFoto = (itemId: string, index: number) => {
+    setRespostas(prev => {
+      const cur = prev[itemId]?.fotosUrls || [];
+      return { ...prev, [itemId]: { ...prev[itemId], fotosUrls: cur.filter((_, i) => i !== index) } };
+    });
+  };
+
   // Add Material to usage list
   const handleAddMaterial = () => {
     if (!selectedMaterialId) return;
@@ -773,6 +801,7 @@ export const ChecklistPreenchimento: React.FC = () => {
         certificadoId: value.certificadoId ? maiusculas(value.certificadoId) : undefined,
         certificadoValidade: value.certificadoValidade || undefined,
         fotoUrl: value.fotoUrl || undefined,
+        fotosUrls: value.fotosUrls && value.fotosUrls.length > 0 ? value.fotosUrls : undefined,
         pendenciaResolvida: value.pendenciaResolvida !== undefined ? value.pendenciaResolvida : undefined,
         fotoResolvidaUrl: value.fotoResolvidaUrl || undefined,
       }));
@@ -1152,6 +1181,51 @@ export const ChecklistPreenchimento: React.FC = () => {
               <StatusChip status="NAO_APLICAVEL" selected={resp.status === 'NAO_APLICAVEL'} onClick={() => handleStatusChange(item.id, 'NAO_APLICAVEL')} />
             </div>
           )}
+
+          {/* Evidências (fotos) — opcional, 1 por toque, até 6 por pergunta */}
+          <Card>
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Evidências (fotos)</span>
+                <span className="text-[10px] font-bold text-muted">{resp.fotosUrls?.length || 0}/6</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(resp.fotosUrls || []).map((url, idx) => (
+                  <div key={idx} className="relative">
+                    <img
+                      src={api.mediaUrl(url)}
+                      alt={`Evidência ${idx + 1}`}
+                      className="h-16 w-16 object-cover rounded-lg border border-border"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFoto(item.id, idx)}
+                      aria-label="Remover foto"
+                      className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-1 shadow"
+                    >
+                      <Trash className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+                {(resp.fotosUrls?.length || 0) < 6 && (
+                  <label className="h-16 w-16 rounded-lg border border-dashed border-border bg-surface-2 flex items-center justify-center cursor-pointer active:scale-95 transition">
+                    <Camera className="h-6 w-6 text-accent" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleAddFoto(item.id, f);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+          </Card>
 
           {/* Observações e Responsável — não para TEXTO (o próprio campo é a observação) */}
           {!isTexto && (
