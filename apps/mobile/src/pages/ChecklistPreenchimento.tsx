@@ -1092,7 +1092,8 @@ export const ChecklistPreenchimento: React.FC = () => {
             </span>
           </div>
 
-          {/* Item Description Card */}
+          {/* Item Description Card — câmera embutida na borda inferior */}
+          <div className="relative mb-6">
           <Card>
             <div className="text-center space-y-4">
               <div>
@@ -1173,15 +1174,16 @@ export const ChecklistPreenchimento: React.FC = () => {
             </div>
           </Card>
 
-          {/* Evidências — câmera centralizada abaixo da pergunta (1 por toque, até 6) */}
-          <div className="flex flex-col items-center gap-3">
+            {/* Câmera embutida no contorno inferior do card (sem rótulo) */}
             {(resp.fotosUrls?.length || 0) < 6 && (
-              <label className="flex flex-col items-center gap-1.5 cursor-pointer active:scale-95 transition">
-                <span className="h-14 w-14 rounded-full bg-accent/10 border border-accent/30 grid place-items-center">
-                  <Camera className="h-7 w-7 text-accent" />
-                </span>
-                <span className="text-[10px] font-bold text-muted uppercase tracking-wider">
-                  {resp.fotosUrls?.length ? `Adicionar foto (${resp.fotosUrls.length}/6)` : 'Adicionar foto (opcional)'}
+              <label className="absolute left-1/2 -bottom-5 -translate-x-1/2 z-10 cursor-pointer active:scale-95 transition" aria-label="Adicionar foto">
+                <span className="relative h-10 w-10 rounded-full bg-accent/10 border border-accent/30 grid place-items-center">
+                  <Camera className="h-5 w-5 text-accent" />
+                  {(resp.fotosUrls?.length || 0) > 0 && (
+                    <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-accent text-white text-[9px] font-bold grid place-items-center">
+                      {resp.fotosUrls?.length}
+                    </span>
+                  )}
                 </span>
                 <input
                   type="file"
@@ -1196,28 +1198,30 @@ export const ChecklistPreenchimento: React.FC = () => {
                 />
               </label>
             )}
-            {(resp.fotosUrls?.length || 0) > 0 && (
-              <div className="flex flex-wrap justify-center gap-2">
-                {(resp.fotosUrls || []).map((url, idx) => (
-                  <div key={idx} className="relative">
-                    <img
-                      src={api.mediaUrl(url)}
-                      alt={`Evidência ${idx + 1}`}
-                      className="h-16 w-16 object-cover rounded-lg border border-border"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveFoto(item.id, idx)}
-                      aria-label="Remover foto"
-                      className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-1 shadow"
-                    >
-                      <Trash className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
+
+          {/* Thumbnails das evidências */}
+          {(resp.fotosUrls?.length || 0) > 0 && (
+            <div className="flex flex-wrap justify-center gap-2">
+              {(resp.fotosUrls || []).map((url, idx) => (
+                <div key={idx} className="relative">
+                  <img
+                    src={api.mediaUrl(url)}
+                    alt={`Evidência ${idx + 1}`}
+                    className="h-16 w-16 object-cover rounded-lg border border-border"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFoto(item.id, idx)}
+                    aria-label="Remover foto"
+                    className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-1 shadow"
+                  >
+                    <Trash className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Status buttons — só STATUS e CERTIFICADO */}
           {showStatus && (
