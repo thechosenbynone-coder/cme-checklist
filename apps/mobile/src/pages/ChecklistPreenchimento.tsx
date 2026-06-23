@@ -1177,10 +1177,10 @@ export const ChecklistPreenchimento: React.FC = () => {
             {/* Câmera embutida no contorno inferior do card (sem rótulo) */}
             {(resp.fotosUrls?.length || 0) < 6 && (
               <label className="absolute left-1/2 -bottom-5 -translate-x-1/2 z-10 cursor-pointer active:scale-95 transition" aria-label="Adicionar foto">
-                <span className="relative h-10 w-10 rounded-full bg-accent/10 border border-accent/30 grid place-items-center">
-                  <Camera className="h-5 w-5 text-accent" />
+                <span className="relative h-11 w-11 rounded-full bg-accent text-white grid place-items-center shadow-lg shadow-accent/30 ring-4 ring-bg">
+                  <Camera className="h-5 w-5" />
                   {(resp.fotosUrls?.length || 0) > 0 && (
-                    <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-accent text-white text-[9px] font-bold grid place-items-center">
+                    <span className="absolute -top-1 -right-1 h-[18px] min-w-[18px] px-1 rounded-full bg-surface text-accent text-[10px] font-extrabold grid place-items-center border border-accent/30 shadow-sm">
                       {resp.fotosUrls?.length}
                     </span>
                   )}
