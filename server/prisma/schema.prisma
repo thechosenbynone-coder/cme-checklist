@@ -160,7 +160,8 @@ model RespostaItem {
   valorNumerico Float?   // MEDICAO (temperatura, amperagem)
   valorTexto    String?  // TEXTO (observações livres)
   createdById String?
-  fotoUrl         String?   // URL do Drive (substitui fotoBase64)
+  fotoUrl         String?   // URL do Drive (legado: foto única — mantido p/ compat)
+  fotosUrls       String[]  @default([]) // evidências por pergunta (até 6)
   fotoResolvidaUrl String?  // URL do Drive (substitui fotoResolvidaBase64)
   certificadoId   String?
   certificadoValidade String?
