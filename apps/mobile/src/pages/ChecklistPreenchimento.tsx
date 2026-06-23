@@ -1092,9 +1092,10 @@ export const ChecklistPreenchimento: React.FC = () => {
             </span>
           </div>
 
-          {/* Item Description Card — câmera embutida na borda inferior */}
-          <div className="relative mb-6">
-          <Card>
+          {/* Card da pergunta + aba de evidência (extensão inferior centralizada) */}
+          <div className="flex flex-col items-center w-full">
+          <Card className="w-full">
+
             <div className="text-center space-y-4">
               <div>
                 <span className="text-[10px] font-extrabold text-muted uppercase tracking-widest block mb-1">Item {item.ordem} de {totalItens}</span>
@@ -1174,17 +1175,16 @@ export const ChecklistPreenchimento: React.FC = () => {
             </div>
           </Card>
 
-            {/* Câmera embutida no contorno inferior do card (sem rótulo) */}
+            {/* Aba de evidência: extensão inferior centralizada do card (mesma
+                linguagem visual; conecta sem emenda via -mt-px + border-t-0) */}
             {(resp.fotosUrls?.length || 0) < 6 && (
-              <label className="absolute left-1/2 -bottom-5 -translate-x-1/2 z-10 cursor-pointer active:scale-95 transition" aria-label="Adicionar foto">
-                <span className="relative h-11 w-11 rounded-full bg-accent text-white grid place-items-center shadow-lg shadow-accent/30 ring-4 ring-bg">
-                  <Camera className="h-5 w-5" />
+              <label className="-mt-px cursor-pointer group" aria-label="Adicionar foto">
+                <div className="flex items-center justify-center gap-1.5 px-8 py-2 bg-surface border border-t-0 border-border rounded-b-xl group-active:bg-surface-2 transition-colors">
+                  <Camera className="h-[18px] w-[18px] text-content" />
                   {(resp.fotosUrls?.length || 0) > 0 && (
-                    <span className="absolute -top-1 -right-1 h-[18px] min-w-[18px] px-1 rounded-full bg-surface text-accent text-[10px] font-extrabold grid place-items-center border border-accent/30 shadow-sm">
-                      {resp.fotosUrls?.length}
-                    </span>
+                    <span className="text-[11px] font-semibold text-muted">{resp.fotosUrls?.length}/6</span>
                   )}
-                </span>
+                </div>
                 <input
                   type="file"
                   accept="image/*"
