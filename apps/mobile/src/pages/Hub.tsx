@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, CheckCircle2, AlertTriangle, LogOut, Loader2, ArrowRight, RefreshCw, Clock, User } from 'lucide-react';
+import { Plus, CheckCircle2, AlertTriangle, LogOut, Loader2, ArrowRight, RefreshCw, Clock, User, Trash } from 'lucide-react';
 import { AppHeader } from '../components/ui/AppHeader';
 import api from '../services/api';
 import { cn } from '../lib/cn';
@@ -272,6 +272,41 @@ export const Hub: React.FC = () => {
     }
   };
 
+  // Exclui um checklist: apaga no servidor (best-effort) e remove o rascunho
+  // local. Funciona tanto para inspeções já criadas no servidor quanto para
+  // rascunhos só locais (servidor pode responder 404 — ignoramos).
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm('Excluir este checklist? Esta ação não pode ser desfeita.')) return;
+    try {
+      await api.inspecoes.remove(id);
+    } catch (err) {
+      console.warn('Falha ao excluir no servidor (segue removendo local):', err);
+    }
+    localStorage.removeItem(`cme_draft_${id}`);
+    const ids = getLocalDraftIds().filter((i) => i !== id);
+    localStorage.setItem('cme_drafts', JSON.stringify(ids));
+    loadInspections();
+  };
+
+  // Limpa todos os rascunhos em andamento (útil para zerar a tela de testes).
+  const handleClearAllDrafts = async () => {
+    if (draftsList.length === 0) return;
+    if (!window.confirm(`Excluir todos os ${draftsList.length} rascunhos? Esta ação não pode ser desfeita.`)) return;
+    setSyncing(true);
+    for (const d of draftsList) {
+      try {
+        await api.inspecoes.remove(d.id);
+      } catch (err) {
+        console.warn('Falha ao excluir no servidor (segue):', d.id, err);
+      }
+      localStorage.removeItem(`cme_draft_${d.id}`);
+    }
+    localStorage.setItem('cme_drafts', JSON.stringify([]));
+    setSyncing(false);
+    loadInspections();
+  };
+
   const fmtDate = (dateStr: string) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -382,6 +417,16 @@ export const Hub: React.FC = () => {
                   <Clock className="h-3.5 w-3.5" />
                   <span>Em Andamento ({draftsList.length})</span>
                 </h3>
+                {draftsList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAllDrafts}
+                    className="text-[10px] font-bold text-red-500 hover:text-red-600 dark:hover:text-red-400 uppercase tracking-wider flex items-center gap-1 px-2 py-1 rounded-lg active:bg-red-500/10"
+                  >
+                    <Trash className="h-3 w-3" />
+                    Limpar todos
+                  </button>
+                )}
               </div>
 
               {draftsList.length === 0 ? (
@@ -391,10 +436,12 @@ export const Hub: React.FC = () => {
               ) : (
                 <div className="space-y-2.5">
                   {draftsList.map(draft => (
-                    <button
+                    <div
                       key={draft.id}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => navigate(`/checklist/${draft.id}`)}
-                      className="w-full text-left bg-surface border border-border hover:bg-surface-2 rounded-2xl p-4 transition-all duration-200 flex items-center justify-between group active:scale-[0.99] relative overflow-hidden"
+                      className="w-full text-left bg-surface border border-border hover:bg-surface-2 rounded-2xl p-4 transition-all duration-200 flex items-center justify-between group active:scale-[0.99] relative overflow-hidden cursor-pointer"
                     >
                       <div className="space-y-2 min-w-0 pr-4">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -416,8 +463,18 @@ export const Hub: React.FC = () => {
                           <span>Ref: {fmtDate(draft.updatedAt)}</span>
                         </div>
                       </div>
-                      <ArrowRight className="h-4 w-4 text-muted group-hover:text-accent group-hover:translate-x-0.5 transition flex-shrink-0" />
-                    </button>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => handleDelete(draft.id, e)}
+                          aria-label="Excluir checklist"
+                          className="p-2 text-muted hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg min-h-[40px] min-w-[40px] flex items-center justify-center"
+                        >
+                          <Trash className="h-4 w-4" />
+                        </button>
+                        <ArrowRight className="h-4 w-4 text-muted group-hover:text-accent group-hover:translate-x-0.5 transition" />
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -439,10 +496,12 @@ export const Hub: React.FC = () => {
                   {completedList.map(item => {
                     const isValidated = item.status === 'VALIDADA';
                     return (
-                      <button
+                      <div
                         key={item.id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => navigate(`/inspecao/${item.id}`)}
-                        className="w-full text-left bg-surface/75 border border-border/80 rounded-2xl p-4 flex items-center justify-between opacity-85 hover:opacity-100 hover:bg-surface-2 transition-all active:scale-[0.99] group"
+                        className="w-full text-left bg-surface/75 border border-border/80 rounded-2xl p-4 flex items-center justify-between opacity-85 hover:opacity-100 hover:bg-surface-2 transition-all active:scale-[0.99] group cursor-pointer"
                       >
                         <div className="space-y-1.5 min-w-0 pr-4">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -464,8 +523,20 @@ export const Hub: React.FC = () => {
                             <span>{fmtDate(item.updatedAt || item.data)}</span>
                           </div>
                         </div>
-                        <ArrowRight className="h-4 w-4 text-muted group-hover:text-accent group-hover:translate-x-0.5 transition flex-shrink-0" />
-                      </button>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {!isValidated && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleDelete(item.id, e)}
+                              aria-label="Excluir checklist"
+                              className="p-2 text-muted hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg min-h-[40px] min-w-[40px] flex items-center justify-center"
+                            >
+                              <Trash className="h-4 w-4" />
+                            </button>
+                          )}
+                          <ArrowRight className="h-4 w-4 text-muted group-hover:text-accent group-hover:translate-x-0.5 transition" />
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
