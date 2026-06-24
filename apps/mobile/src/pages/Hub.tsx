@@ -286,7 +286,9 @@ export const Hub: React.FC = () => {
     localStorage.removeItem(`cme_draft_${id}`);
     const ids = getLocalDraftIds().filter((i) => i !== id);
     localStorage.setItem('cme_drafts', JSON.stringify(ids));
-    loadInspections();
+    // Remoção otimista: tira da tela sem refazer a busca (sem flicker/lentidão).
+    setDraftsList((prev) => prev.filter((d) => d.id !== id));
+    setCompletedList((prev) => prev.filter((c) => c.id !== id));
   };
 
   // Limpa todos os rascunhos em andamento (útil para zerar a tela de testes).
@@ -304,7 +306,7 @@ export const Hub: React.FC = () => {
     }
     localStorage.setItem('cme_drafts', JSON.stringify([]));
     setSyncing(false);
-    loadInspections();
+    setDraftsList([]); // remoção otimista
   };
 
   const fmtDate = (dateStr: string) => {

@@ -187,6 +187,7 @@ export const ChecklistPreenchimento: React.FC = () => {
   // Canvas Signature ref
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [assinou, setAssinou] = useState(false); // houve traço na assinatura
 
   // Loading, Media Uploading and Video Recording State
   const [loading, setLoading] = useState(true);
@@ -669,6 +670,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     ctx.beginPath();
     ctx.moveTo(x, y);
     setIsDrawing(true);
+    setAssinou(true);
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -696,6 +698,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setAssinou(false);
   };
 
   // Toggle executante field trigger
@@ -979,102 +982,108 @@ export const ChecklistPreenchimento: React.FC = () => {
   const steps = getSteps();
   const totalSteps = steps.length;
 
-  const isStepComplete = (stepIndex: number): boolean => {
-    if (stepIndex < 0 || stepIndex >= steps.length) return false;
+  // Estado de um passo: 'concluida' (preenchido de verdade), 'pendente'
+  // (obrigatório e ainda vazio) ou 'opcional' (não obrigatório e vazio).
+  const stepStatus = (stepIndex: number): 'concluida' | 'pendente' | 'opcional' => {
+    if (stepIndex < 0 || stepIndex >= steps.length) return 'opcional';
     const step = steps[stepIndex];
 
     if (step.type === 'item' && step.itemIndex !== undefined) {
       const item = modelo?.itens?.[step.itemIndex];
-      if (!item) return false;
+      if (!item) return 'opcional';
       const resp = respostas[item.id];
       const tipo = item.tipo || 'STATUS';
-      const exigeStatus = tipo === 'STATUS' || tipo === 'CERTIFICADO';
+      let respondido = false;
 
-      if (exigeStatus) {
-        if (!resp || !resp.status) {
-          return false;
-        }
-
+      if (tipo === 'STATUS' || tipo === 'CERTIFICADO') {
+        respondido = !!resp?.status;
         // Certificado com status OK exige a validade (ID é opcional).
-        if (tipo === 'CERTIFICADO' && resp.status === 'OK') {
-          const hasVal = resp.certificadoValidade && resp.certificadoValidade.trim();
-          if (!hasVal) {
-            return false;
-          }
+        if (respondido && tipo === 'CERTIFICADO' && resp?.status === 'OK') {
+          respondido = !!(resp.certificadoValidade && resp.certificadoValidade.trim());
         }
-
-        if (resp.status === 'PENDENTE' && (!resp.observacao || !resp.observacao.trim())) {
-          return false;
+        // Pendente exige a observação do que está pendente.
+        if (respondido && resp?.status === 'PENDENTE') {
+          respondido = !!(resp.observacao && resp.observacao.trim());
         }
+      } else if (tipo === 'MEDICAO') {
+        respondido = resp?.valorNumerico !== undefined && resp?.valorNumerico !== null;
+      } else if (tipo === 'TEXTO') {
+        respondido = !!(resp?.valorTexto && resp.valorTexto.trim());
       }
-      return true;
+
+      if (respondido) return 'concluida';
+      return item.obrigatorio ? 'pendente' : 'opcional';
     }
 
     if (step.type === 'materials') {
-      return true;
+      return materiaisUtilizados.length > 0 ? 'concluida' : 'opcional';
     }
 
     if (step.type === 'pendencies') {
       const pendingItems = modelo?.itens?.filter(it => respostas[it.id]?.status === 'PENDENTE') || [];
-      for (const item of pendingItems) {
-        const resp = respostas[item.id];
-        if (!resp) return false;
-        if (resp.pendenciaResolvida === undefined) {
-          return false;
-        }
-        // Toda pendência exige evidência (foto/vídeo), resolvida ou não.
-        if (!resp.fotoResolvidaUrl) {
-          return false;
-        }
-      }
-      return true;
+      const ok = pendingItems.every(it => {
+        const r = respostas[it.id];
+        return r && r.pendenciaResolvida !== undefined && !!r.fotoResolvidaUrl;
+      });
+      return ok ? 'concluida' : 'pendente';
     }
 
     if (step.type === 'equip_photos') {
-      return fotosEquipamento.every(f => !!f);
+      return fotosEquipamento.every(f => !!f) ? 'concluida' : 'pendente';
     }
 
     if (step.type === 'observations') {
-      return true;
+      return observacoesGerais && observacoesGerais.trim() ? 'concluida' : 'opcional';
     }
 
     if (step.type === 'signature') {
-      return true;
+      return assinou ? 'concluida' : 'opcional';
     }
 
-    return true;
+    return 'opcional';
   };
 
+  // Só libera avançar quando o passo não está pendente (obrigatório e vazio).
+  const podeAvancar = (stepIndex: number): boolean => stepStatus(stepIndex) !== 'pendente';
+
   // Blocos navegáveis: uma entrada por seção do checklist + uma por etapa
-  // final (materiais, pendências, fotos, observações, assinatura). `done`
-  // sinaliza pendência (guia, não trava).
+  // final (materiais, pendências, fotos, observações, assinatura). `estado`:
+  // 'concluida' (tudo preenchido), 'pendente' (falta obrigatório) ou 'opcional'.
   const blocos = (() => {
-    const out: { label: string; stepIndex: number; done: boolean }[] = [];
+    const out: {
+      label: string;
+      stepIndex: number;
+      estado: 'concluida' | 'pendente' | 'opcional';
+      concluidas: number;
+      total: number;
+    }[] = [];
     let lastSecao: string | null = null;
     steps.forEach((s, idx) => {
       if (s.type === 'item' && s.itemIndex !== undefined) {
         const secao = modelo?.itens?.[s.itemIndex]?.secao || 'ITENS';
         if (secao !== lastSecao) {
-          out.push({ label: secao, stepIndex: idx, done: false });
+          out.push({ label: secao, stepIndex: idx, estado: 'opcional', concluidas: 0, total: 0 });
           lastSecao = secao;
         }
       } else {
-        out.push({ label: s.label, stepIndex: idx, done: false });
+        out.push({ label: s.label, stepIndex: idx, estado: 'opcional', concluidas: 0, total: 0 });
         lastSecao = null;
       }
     });
-    // Um bloco está completo se todos os seus passos estão completos.
     for (let i = 0; i < out.length; i++) {
       const start = out[i].stepIndex;
       const end = i + 1 < out.length ? out[i + 1].stepIndex : totalSteps;
-      let done = true;
+      let concluidas = 0;
+      let temPendente = false;
       for (let s = start; s < end; s++) {
-        if (!isStepComplete(s)) {
-          done = false;
-          break;
-        }
+        const st = stepStatus(s);
+        if (st === 'concluida') concluidas++;
+        else if (st === 'pendente') temPendente = true;
       }
-      out[i].done = done;
+      const total = end - start;
+      out[i].concluidas = concluidas;
+      out[i].total = total;
+      out[i].estado = concluidas === total ? 'concluida' : temPendente ? 'pendente' : 'opcional';
     }
     return out;
   })();
@@ -1765,11 +1774,21 @@ export const ChecklistPreenchimento: React.FC = () => {
   // Tocar entra no preenchimento normal (uma pergunta por vez) daquela seção.
   const renderBlocoCard = (i: number) => {
     const b = blocos[i];
-    const [start, end] = blocoRange(i);
+    const [start] = blocoRange(i);
     const pinned = pins.includes(b.label);
-    let doneCount = 0;
-    for (let s = start; s < end; s++) if (isStepComplete(s)) doneCount++;
-    const total = end - start;
+
+    const badgeCls =
+      b.estado === 'concluida'
+        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+        : b.estado === 'pendente'
+          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+          : 'bg-surface-2 text-muted';
+    const legenda =
+      b.estado === 'concluida'
+        ? 'Concluída'
+        : b.estado === 'pendente'
+          ? `${b.concluidas} de ${b.total} preenchidos`
+          : 'Opcional';
 
     return (
       <div
@@ -1782,15 +1801,12 @@ export const ChecklistPreenchimento: React.FC = () => {
         }}
         className="bg-surface border border-border rounded-2xl p-4 flex items-center gap-3 min-h-[68px] cursor-pointer active:scale-[0.99] active:bg-surface-2 transition"
       >
-        <div className={cn(
-          'h-10 w-10 rounded-full grid place-items-center shrink-0 text-[10px] font-extrabold',
-          b.done ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-        )}>
-          {b.done ? <Check className="h-5 w-5" /> : `${doneCount}/${total}`}
+        <div className={cn('h-10 w-10 rounded-full grid place-items-center shrink-0 text-[10px] font-extrabold', badgeCls)}>
+          {b.estado === 'concluida' ? <Check className="h-5 w-5" /> : `${b.concluidas}/${b.total}`}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm text-content leading-tight">{b.label}</p>
-          <p className="text-[11px] text-muted mt-0.5">{b.done ? 'Concluída' : `${doneCount} de ${total} preenchidos`}</p>
+          <p className="text-[11px] text-muted mt-0.5">{legenda}</p>
         </div>
         <button
           type="button"
@@ -1838,6 +1854,7 @@ export const ChecklistPreenchimento: React.FC = () => {
           </div>
         ) : (
           <div className="flex-1 flex flex-col min-h-0">
+            {/* Barra da seção: "Roteiro" (retorno) sempre visível, sem rodapé fixo */}
             <div className="bg-surface border-b border-border px-3 py-2 flex items-center gap-2 flex-shrink-0">
               <button
                 type="button"
@@ -1850,8 +1867,8 @@ export const ChecklistPreenchimento: React.FC = () => {
               <span className="text-xs font-bold text-content truncate">{blocos[blocoFoco].label}</span>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col justify-center min-h-0 no-scrollbar">
-              <div className="max-w-md w-full mx-auto">
+            <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
+              <div className="max-w-md w-full mx-auto space-y-4 pb-4">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentStep}
@@ -1864,56 +1881,66 @@ export const ChecklistPreenchimento: React.FC = () => {
                     {renderStepContent(currentStep)}
                   </motion.div>
                 </AnimatePresence>
+
+                {/* Navegação inline (no conteúdo, não no rodapé). Avançar só
+                    aparece quando a pergunta está preenchida. */}
+                {(() => {
+                  const [fStart, fEnd] = blocoRange(blocoFoco);
+                  const lastInBloco = currentStep >= fEnd - 1;
+                  const isSig = fEnd >= totalSteps;
+                  const liberado = podeAvancar(currentStep);
+                  return (
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      {currentStep > fStart ? (
+                        <button
+                          type="button"
+                          onClick={() => setCurrentStep(currentStep - 1)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-surface-2 text-content border border-border rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          <span>Voltar</span>
+                        </button>
+                      ) : (
+                        <div className="flex-1" />
+                      )}
+                      {!liberado ? (
+                        <div className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 text-center px-2 min-h-[48px]">
+                          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                          <span>Preencha para avançar</span>
+                        </div>
+                      ) : isSig && lastInBloco ? (
+                        <button
+                          type="button"
+                          onClick={handleSaveChecklist}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
+                        >
+                          <Save className="h-4 w-4" />
+                          <span>Finalizar</span>
+                        </button>
+                      ) : lastInBloco ? (
+                        <button
+                          type="button"
+                          onClick={() => setBlocoFoco(null)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
+                        >
+                          <Check className="h-4 w-4" />
+                          <span>Concluir seção</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setCurrentStep(currentStep + 1)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
+                        >
+                          <span>Avançar</span>
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
-
-            {(() => {
-              const [fStart, fEnd] = blocoRange(blocoFoco);
-              const lastInBloco = currentStep >= fEnd - 1;
-              const isSig = fEnd >= totalSteps;
-              return (
-                <div className="bg-surface border-t border-border p-4 shadow-lg flex-shrink-0 z-50 safe-bottom">
-                  <div className="max-w-md mx-auto flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => (currentStep > fStart ? setCurrentStep(currentStep - 1) : setBlocoFoco(null))}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-surface-2 text-content border border-border rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      <span>{currentStep > fStart ? 'Voltar' : 'Roteiro'}</span>
-                    </button>
-                    {isSig && lastInBloco ? (
-                      <button
-                        type="button"
-                        onClick={handleSaveChecklist}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
-                      >
-                        <Save className="h-4 w-4" />
-                        <span>Finalizar</span>
-                      </button>
-                    ) : lastInBloco ? (
-                      <button
-                        type="button"
-                        onClick={() => setBlocoFoco(null)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
-                      >
-                        <Check className="h-4 w-4" />
-                        <span>Concluir seção</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setCurrentStep(currentStep + 1)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
-                      >
-                        <span>Avançar</span>
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
           </div>
         )
       }

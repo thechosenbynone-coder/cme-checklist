@@ -186,7 +186,11 @@ export const EquipamentoSelecao: React.FC = () => {
     return '';
   };
 
-  const step4Completed = responsavel.trim() !== '' && origem.trim() !== '' && destino.trim() !== '';
+  const step4Completed =
+    responsavel.trim() !== '' &&
+    origem.trim() !== '' &&
+    destino.trim() !== '' &&
+    compressorUtilizado.trim() !== '';
   const allStepsDone = tipoChecklist !== null && selectedEqId !== '' && tipoInspecao !== null && step4Completed;
 
   return (
