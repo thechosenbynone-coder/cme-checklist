@@ -106,6 +106,8 @@ const api = {
         method: 'PATCH',
         body: JSON.stringify({ alteracoes }),
       }),
+    remove: (id: string): Promise<{ ok: boolean }> =>
+      request<{ ok: boolean }>(`/inspecoes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
   checklist: {
     bootstrap: (equipamentoId: string, tipo: string): Promise<{

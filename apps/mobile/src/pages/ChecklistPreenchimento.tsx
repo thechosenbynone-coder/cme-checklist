@@ -49,6 +49,58 @@ interface DraftLocal {
   serverCreated?: boolean; // inspeção já criada no servidor (POST /iniciar)
 }
 
+// Reconstrói o rascunho local a partir de uma inspeção do servidor (quando não
+// há cópia local — ex.: criada via /iniciar ou iniciada em outro aparelho).
+const reconstruirDraft = (id: string, insp: any): DraftLocal => {
+  const respostas: Record<string, any> = {};
+  (insp.respostas || []).forEach((r: any) => {
+    respostas[r.itemId] = {
+      status: r.status ?? undefined,
+      observacao: r.observacao || '',
+      responsavel: r.responsavel || '',
+      valorNumerico: r.valorNumerico ?? undefined,
+      valorTexto: r.valorTexto || '',
+      certificadoId: r.certificadoId || '',
+      certificadoValidade: r.certificadoValidade || '',
+      fotoUrl: r.fotoUrl || undefined,
+      fotosUrls: Array.isArray(r.fotosUrls) ? r.fotosUrls : [],
+      pendenciaResolvida: r.pendenciaResolvida ?? undefined,
+      fotoResolvidaUrl: r.fotoResolvidaUrl || undefined,
+    };
+  });
+  const fotos = Array.isArray(insp.fotosUrls) ? insp.fotosUrls : [];
+  return {
+    id,
+    metadata: {
+      equipamentoId: insp.equipamentoId,
+      tipo: insp.tipo,
+      equipamentoTipo: insp.equipamento?.tipo,
+      responsavelGeral: insp.responsavelGeral || '',
+      compressorUtilizado: insp.compressorUtilizado || undefined,
+      classificacao: insp.classificacao || undefined,
+      origem: insp.origem || '',
+      destino: insp.destino || '',
+      equipamentoCodigo: insp.equipamento?.codigoExibicao || insp.equipamento?.codigo,
+      equipamentoNome: insp.equipamento?.nome,
+    },
+    respostas,
+    fotosEquipamento: [fotos[0], fotos[1], fotos[2]],
+    materiaisUtilizados: (insp.materiais || []).map((m: any) => ({
+      materialId: m.materialId,
+      quantidade: m.quantidade,
+      observacao: m.observacao || '',
+      material: m.material,
+    })),
+    observacoesGerais: insp.observacoesGerais || '',
+    currentStep: 0,
+    dirty: false,
+    localUpdatedAt: insp.updatedAt || new Date().toISOString(),
+    modeloId: insp.modeloId || '',
+    modeloVersao: insp.modeloVersao || 0,
+    serverCreated: true,
+  };
+};
+
 // Pre-fill answers with equipment certifications if available
 const initResponses = (mod: ChecklistModelo, eq: Equipamento) => {
   const initialRespostas: Record<string, any> = {};
@@ -309,11 +361,30 @@ export const ChecklistPreenchimento: React.FC = () => {
       setLoading(true);
       setError('');
 
-      const rawDraft = localStorage.getItem(`cme_draft_${id}`);
+      let rawDraft = localStorage.getItem(`cme_draft_${id}`);
+
+      // Sem cópia local: a inspeção pode existir só no servidor (criada via
+      // /iniciar ou iniciada em outro aparelho). Reconstrói o rascunho local
+      // a partir do servidor em vez de falhar.
       if (!rawDraft) {
-        alert('Rascunho não encontrado.');
-        navigate('/');
-        return;
+        try {
+          const insp: any = await api.inspecoes.get(id);
+          if (!insp) throw new Error('not found');
+          if (insp.status === 'CONCLUIDA' || insp.status === 'VALIDADA') {
+            navigate(`/inspecao/${id}`);
+            return;
+          }
+          const reconstruido = reconstruirDraft(id, insp);
+          localStorage.setItem(`cme_draft_${id}`, JSON.stringify(reconstruido));
+          const idsRaw = localStorage.getItem('cme_drafts');
+          const ids: string[] = idsRaw ? JSON.parse(idsRaw) : [];
+          if (!ids.includes(id)) localStorage.setItem('cme_drafts', JSON.stringify([...ids, id]));
+          rawDraft = JSON.stringify(reconstruido);
+        } catch (e) {
+          alert('Rascunho não encontrado.');
+          navigate('/');
+          return;
+        }
       }
 
       let draft: DraftLocal;
@@ -974,22 +1045,6 @@ export const ChecklistPreenchimento: React.FC = () => {
     return true;
   };
 
-  // Navegação livre: avança sem exigir que o passo atual esteja completo
-  // (a validação vira guia, não trava — setores diferentes preenchem partes
-  // diferentes). A obrigatoriedade real é checada só na conclusão.
-  const goToStep = (target: number) => {
-    if (autoAdvanceTimeoutRef.current) {
-      clearTimeout(autoAdvanceTimeoutRef.current);
-      autoAdvanceTimeoutRef.current = null;
-    }
-    if (target >= 0 && target < totalSteps) {
-      setCurrentStep(target);
-    }
-  };
-
-  const goToNextStep = () => goToStep(currentStep + 1);
-  const goToPrevStep = () => goToStep(currentStep - 1);
-
   // Blocos navegáveis: uma entrada por seção do checklist + uma por etapa
   // final (materiais, pendências, fotos, observações, assinatura). `done`
   // sinaliza pendência (guia, não trava).
@@ -1023,16 +1078,6 @@ export const ChecklistPreenchimento: React.FC = () => {
     }
     return out;
   })();
-
-  // Bloco atual = o de maior stepIndex que ainda é <= currentStep.
-  let currentBlocoIndex = 0;
-  for (let i = 0; i < blocos.length; i++) {
-    if (blocos[i].stepIndex <= currentStep) currentBlocoIndex = i;
-  }
-
-  // Piloto: layout de cartões/seções só no After Cooler (gate). Os demais
-  // checklists seguem no fluxo atual (wizard + dropdown), intactos.
-  const usarCards = (modelo?.tipoEquipamento || equipamento?.tipo) === 'After Cooler';
 
   // Faixa de passos [start, end) de cada bloco/seção.
   const blocoRange = (i: number): [number, number] => [
@@ -1774,8 +1819,7 @@ export const ChecklistPreenchimento: React.FC = () => {
         progressLabel={`Passo ${currentStep + 1} de ${totalSteps}`}
       />
 
-      {usarCards ? (
-        blocoFoco === null ? (
+      {blocoFoco === null ? (
           <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
             <div className="max-w-md w-full mx-auto space-y-5 pb-6">
               {pins.length > 0 && (
@@ -1872,84 +1916,7 @@ export const ChecklistPreenchimento: React.FC = () => {
             })()}
           </div>
         )
-      ) : (
-        <>
-      {/* Navegação livre entre seções */}
-      {blocos.length > 1 && (
-        <div className="bg-surface border-b border-border px-4 py-2 flex-shrink-0">
-          <div className="max-w-md mx-auto">
-            <label className="sr-only" htmlFor="bloco-nav">Ir para seção</label>
-            <select
-              id="bloco-nav"
-              value={currentBlocoIndex}
-              onChange={(e) => goToStep(blocos[Number(e.target.value)].stepIndex)}
-              className="w-full px-3 py-2 border border-border rounded-lg text-xs font-bold bg-surface-2 text-content outline-none focus:ring-2 focus:ring-accent/50"
-            >
-              {blocos.map((b, i) => (
-                <option key={i} value={i}>
-                  {i + 1}. {b.label}{b.done ? '' : ' (pendente)'}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col justify-center min-h-0 no-scrollbar">
-        <div className="max-w-md w-full mx-auto">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentStep}
-              variants={stepVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={{ duration: 0.18 }}
-            >
-              {renderStepContent()}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </div>
-
-      {/* Bottom Sticky Action Bar */}
-      <div className="bg-surface border-t border-border p-4 shadow-lg flex-shrink-0 z-50 safe-bottom">
-        <div className="max-w-md mx-auto flex items-center justify-between gap-3">
-          <motion.button
-            layout
-            type="button"
-            onClick={goToPrevStep}
-            disabled={currentStep === 0}
-            className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-surface-2 text-content border border-border rounded-xl font-bold transition min-h-[48px] disabled:opacity-40 disabled:pointer-events-none active:scale-[0.98]"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            <span>Voltar</span>
-          </motion.button>
-
-          {currentStep === totalSteps - 1 ? (
-            <button
-              type="button"
-              onClick={handleSaveChecklist}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold transition min-h-[48px] active:scale-[0.98]"
-            >
-              <Save className="h-4 w-4" />
-              <span>Finalizar</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={goToNextStep}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-accent text-white hover:bg-accent/90 rounded-xl font-bold transition min-h-[48px] active:scale-[0.98]"
-            >
-              <span>Avançar</span>
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      </div>
-        </>
-      )}
+      }
     </div>
   );
 };

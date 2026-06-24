@@ -614,3 +614,21 @@ inspecoesRouter.get('/api/inspecoes/:id/historico', async (req, res) => {
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
+
+// DELETE /api/inspecoes/:id — exclui inspeção (limpeza). Respostas e materiais
+// caem por cascata. Inspeção VALIDADA é protegida (registro oficial ISO).
+inspecoesRouter.delete('/api/inspecoes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const insp = await prisma.inspecao.findUnique({ where: { id }, select: { status: true } });
+    if (!insp) return res.status(404).json({ error: 'Inspeção não encontrada.' });
+    if (insp.status === 'VALIDADA') {
+      return res.status(409).json({ error: 'Inspeção validada não pode ser excluída.' });
+    }
+    await prisma.inspecao.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (error: any) {
+    console.error('Error deleting inspection:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
