@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Camera, Pin, Check, ArrowLeft } from 'lucide-react';
+import { AlertTriangle, Save, Plus, Trash, ShieldCheck, ChevronRight, Camera, Pin, Check, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '../components/ui/Card';
 import { StatusChip } from '../components/ui/StatusChip';
@@ -1853,57 +1853,39 @@ export const ChecklistPreenchimento: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col min-h-0">
-            {/* Barra da seção: "Roteiro" (retorno) sempre visível, sem rodapé fixo */}
-            <div className="bg-surface border-b border-border px-3 py-2 flex items-center gap-2 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setBlocoFoco(null)}
-                aria-label="Voltar ao roteiro"
-                className="flex items-center gap-1 text-xs font-bold text-content px-2 py-2 rounded-lg active:bg-surface-2 min-h-[40px]"
-              >
-                <ArrowLeft className="h-4 w-4" /> Roteiro
-              </button>
-              <span className="text-xs font-bold text-content truncate">{blocos[blocoFoco].label}</span>
-            </div>
+          <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
+            <div className="max-w-md w-full mx-auto space-y-4 pb-4">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentStep}
+                  variants={stepVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={{ duration: 0.18 }}
+                >
+                  {renderStepContent(currentStep)}
+                </motion.div>
+              </AnimatePresence>
 
-            <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
-              <div className="max-w-md w-full mx-auto space-y-4 pb-4">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={currentStep}
-                    variants={stepVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    transition={{ duration: 0.18 }}
-                  >
-                    {renderStepContent(currentStep)}
-                  </motion.div>
-                </AnimatePresence>
-
-                {/* Navegação inline (no conteúdo, não no rodapé). Avançar só
-                    aparece quando a pergunta está preenchida. */}
-                {(() => {
-                  const [fStart, fEnd] = blocoRange(blocoFoco);
-                  const lastInBloco = currentStep >= fEnd - 1;
-                  const isSig = fEnd >= totalSteps;
-                  const liberado = podeAvancar(currentStep);
-                  return (
-                    <div className="flex items-center justify-between gap-3 pt-1">
-                      {currentStep > fStart ? (
-                        <button
-                          type="button"
-                          onClick={() => setCurrentStep(currentStep - 1)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-surface-2 text-content border border-border rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                          <span>Voltar</span>
-                        </button>
-                      ) : (
-                        <div className="flex-1" />
-                      )}
-                      {!liberado ? (
+              {/* Navegação inline (no conteúdo, sem rodapé fixo): "Roteiro"
+                  (retorno) sempre visível; "Avançar" só quando preenchido. */}
+              {(() => {
+                const [, fEnd] = blocoRange(blocoFoco);
+                const lastInBloco = currentStep >= fEnd - 1;
+                const isSig = fEnd >= totalSteps;
+                const liberado = podeAvancar(currentStep);
+                return (
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setBlocoFoco(null)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs bg-surface-2 text-content border border-border rounded-xl font-bold min-h-[48px] active:scale-[0.98] transition"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      <span>Roteiro</span>
+                    </button>
+                    {!liberado ? (
                         <div className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 text-center px-2 min-h-[48px]">
                           <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                           <span>Preencha para avançar</span>
@@ -1941,7 +1923,6 @@ export const ChecklistPreenchimento: React.FC = () => {
                 })()}
               </div>
             </div>
-          </div>
         )
       }
     </div>
