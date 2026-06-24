@@ -3,6 +3,7 @@
 import './lib/env.js'; // PRIMEIRO: carrega .env antes de módulos que leem process.env
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from './auth.js';
 import { publicRouter } from './routes/public.routes.js';
@@ -14,6 +15,9 @@ import { inspecoesRouter } from './routes/inspecoes.routes.js';
 import { adminRouter } from './routes/admin.routes.js';
 
 const app = express();
+
+// gzip nas respostas — reduz muito o payload (bootstrap/respostas) em rede de campo.
+app.use(compression());
 
 // ── CORS allowlist ─────────────────────────────────────────────────
 // Origens liberadas via env CORS_ORIGINS (separadas por vírgula). "*" libera tudo.

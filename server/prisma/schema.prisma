@@ -115,6 +115,8 @@ model ItemChecklist {
 
   modelo ChecklistModelo @relation(fields: [modeloId], references: [id], onDelete: Cascade)
   respostas  RespostaItem[]
+
+  @@index([modeloId]) // bootstrap puxa os itens por modelo
 }
 
 model Inspecao {
@@ -148,6 +150,7 @@ model Inspecao {
   materiais   MaterialUtilizado[]
 
   @@index([equipamentoId, data])
+  @@index([createdById, status]) // Home do app: GET /inspecoes/mine
 }
 
 model RespostaItem {
@@ -219,6 +222,9 @@ model MaterialUtilizado {
 
   inspecao Inspecao @relation(fields: [inspecaoId], references: [id], onDelete: Cascade)
   material Material @relation(fields: [materialId], references: [id])
+
+  @@index([inspecaoId])
+  @@index([materialId])
 }
 
 model AuditLog {
