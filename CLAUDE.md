@@ -178,8 +178,13 @@ Depois de merge de PR #28:
 - **Timezone:** sempre America/Sao_Paulo no cálculo de datas (não local do browser)
 - **Resposta paginada:** sempre envelope {data, total, page, limit, totalPages}
 
+### Time de Desenvolvimento (Sub-Agents)
+
+Definições de papéis, regras de orquestração e formatos de entrega em [team-agents.md](team-agents.md).
+
 ### Links Úteis
 
 - [Plano de implementação completo](https://github.com/thechosenbynone-coder/cme-checklist) (no PR #28)
+- [Definições do time de agents](team-agents.md) — papéis, regras, formatos
 - Memory project: `sprint-campo-deploy.md` — passos manuais de produção
 - Migration Prisma: `server/prisma/migrations/20260626120000_add_cpf_video/migration.sql`
