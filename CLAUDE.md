@@ -182,9 +182,21 @@ Depois de merge de PR #28:
 
 Definições de papéis, regras de orquestração e formatos de entrega em [team-agents.md](team-agents.md).
 
+### Backlog & Próximos Passos
+
+**Status:** Sprint "Pronto para Campo" (PR #28) mergeado. Código implementado (~95%).  
+**Bloqueador:** TypeScript build com erros de tipo (8 erros em routes). Zero testes de integração.  
+**Alvo:** Uso em campo (2-4 semanas).
+
+Backlog detalhado em [BACKLOG.md](BACKLOG.md):
+- **P0 (Blocker):** Corrigir erros de build Prisma (30min)
+- **P1 (Must have):** Implementar 6 suites de teste (12h, rodando em paralelo com team de agents)
+- **P2 (Should have):** Deployment checklist, seed fix, timezone tests, docs (4h)
+
 ### Links Úteis
 
 - [Plano de implementação completo](https://github.com/thechosenbynone-coder/cme-checklist) (no PR #28)
 - [Definições do time de agents](team-agents.md) — papéis, regras, formatos
+- [Backlog detalhado](BACKLOG.md) — prioridades, esforço, riscos, next steps
 - Memory project: `sprint-campo-deploy.md` — passos manuais de produção
 - Migration Prisma: `server/prisma/migrations/20260626120000_add_cpf_video/migration.sql`
