@@ -33,9 +33,10 @@ enum TipoInspecao {
 model User {
   id        String   @id @default(uuid())
   nome      String
-  email     String   @unique
-  funcao    String?  // Operador, Supervisor, Gestor, Admin
-  senhaHash String?  // Hash bcrypt da senha (auth real)
+  cpf       String?  @unique
+  email     String?  @unique
+  funcao    String?
+  senhaHash String?
   ativo     Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -137,6 +138,7 @@ model Inspecao {
   validadaEm    DateTime?
   assinaturaUrl   String?   // URL do Drive (substitui assinaturaBase64)
   fotosUrls       String[]  // Array de URLs do Drive (substitui fotosEquipamento)
+  videoUrl        String?   // Vídeo geral do equipamento (separado de fotosUrls)
   origem          String?
   destino         String?
   compressorUtilizado String?
@@ -165,6 +167,7 @@ model RespostaItem {
   createdById String?
   fotoUrl         String?   // URL do Drive (legado: foto única — mantido p/ compat)
   fotosUrls       String[]  @default([]) // evidências por pergunta (até 6)
+  videoUrl        String?   // vídeo de evidência (separado de fotosUrls)
   fotoResolvidaUrl String?  // URL do Drive (substitui fotoResolvidaBase64)
   certificadoId   String?
   certificadoValidade String?

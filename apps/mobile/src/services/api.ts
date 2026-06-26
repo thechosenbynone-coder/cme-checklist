@@ -1,4 +1,4 @@
-import { Inspecao, Equipamento, Material, ChecklistModelo, User } from '@cme/types';
+import { Inspecao, Equipamento, Material, ChecklistModelo, User, IntegridadeReport } from '@cme/types';
 
 const TOKEN_KEY = 'cme_token';
 const USER_KEY = 'cme_current_user';
@@ -108,6 +108,9 @@ const api = {
       }),
     remove: (id: string): Promise<{ ok: boolean }> =>
       request<{ ok: boolean }>(`/inspecoes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    // Fase 3: relatório de integridade (preflight de conclusão).
+    integridade: (id: string): Promise<IntegridadeReport> =>
+      request<IntegridadeReport>(`/inspecoes/${encodeURIComponent(id)}/integridade`),
   },
   checklist: {
     bootstrap: (equipamentoId: string, tipo: string): Promise<{

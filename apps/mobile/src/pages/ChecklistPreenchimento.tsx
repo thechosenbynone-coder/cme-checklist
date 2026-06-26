@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Save, Plus, Trash, ShieldCheck, ChevronRight, Camera, Pin, Check, ArrowLeft } from 'lucide-react';
+import { AlertTriangle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Camera, Pin, Check, ArrowLeft, X, CheckCircle2, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '../components/ui/Card';
 import { StatusChip } from '../components/ui/StatusChip';
 import { AppHeader } from '../components/ui/AppHeader';
 import { cn } from '../lib/cn';
 import api from '../services/api';
-import { Equipamento, ChecklistModelo, Material, StatusItem, maiusculas } from '@cme/types';
+import { Equipamento, ChecklistModelo, Material, StatusItem, maiusculas, IntegridadeReport } from '@cme/types';
 
 // Formata ISO (YYYY-MM-DD...) para DD/MM/AAAA
 const fmtBR = (iso?: string | null): string => {
@@ -39,6 +39,7 @@ interface DraftLocal {
   };
   respostas: Record<string, any>;
   fotosEquipamento: (string | undefined)[];
+  videoEquipamento?: string;
   materiaisUtilizados: any[];
   observacoesGerais: string;
   currentStep: number;
@@ -64,6 +65,7 @@ const reconstruirDraft = (id: string, insp: any): DraftLocal => {
       certificadoValidade: r.certificadoValidade || '',
       fotoUrl: r.fotoUrl || undefined,
       fotosUrls: Array.isArray(r.fotosUrls) ? r.fotosUrls : [],
+      videoUrl: r.videoUrl || undefined,
       pendenciaResolvida: r.pendenciaResolvida ?? undefined,
       fotoResolvidaUrl: r.fotoResolvidaUrl || undefined,
     };
@@ -155,10 +157,27 @@ export const ChecklistPreenchimento: React.FC = () => {
     certificadoValidade?: string;
     fotoUrl?: string;
     fotosUrls?: string[];
+    videoUrl?: string;
     pendenciaResolvida?: boolean;
     fotoResolvidaUrl?: string;
   }>>({});
   const [fotosEquipamento, setFotosEquipamento] = useState<(string | undefined)[]>([undefined, undefined, undefined]);
+  const [videoEquipamento, setVideoEquipamento] = useState<string | undefined>(undefined);
+
+  // Preflight de conclusão (gate de integridade antes de fechar a inspeção).
+  const payloadConclusaoRef = useRef<any>(null);
+  const [preflightReport, setPreflightReport] = useState<IntegridadeReport | null>(null);
+  const [showPreflight, setShowPreflight] = useState(false);
+
+  // Feedback visual (toast). Sucesso/aviso somem sozinhos; erro persiste.
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const showFeedback = (type: 'success' | 'error' | 'warning', text: string) => setFeedbackMsg({ type, text });
+  useEffect(() => {
+    if (feedbackMsg && feedbackMsg.type !== 'error') {
+      const t = setTimeout(() => setFeedbackMsg(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [feedbackMsg]);
   const [materiaisDisponiveis, setMateriaisDisponiveis] = useState<Material[]>([]);
   const [materiaisUtilizados, setMateriaisUtilizados] = useState<any[]>([]);
   
@@ -278,6 +297,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     pendenciaResolvida: value.pendenciaResolvida ?? null,
     fotoUrl: value.fotoUrl || null,
     fotosUrls: Array.isArray(value.fotosUrls) ? value.fotosUrls : [],
+    videoUrl: value.videoUrl || null,
     fotoResolvidaUrl: value.fotoResolvidaUrl || null,
   });
 
@@ -401,6 +421,7 @@ export const ChecklistPreenchimento: React.FC = () => {
       if (draft.currentStep !== undefined) setCurrentStep(draft.currentStep);
       if (draft.observacoesGerais !== undefined) setObservacoesGerais(draft.observacoesGerais);
       if (draft.fotosEquipamento !== undefined) setFotosEquipamento(draft.fotosEquipamento);
+      if (draft.videoEquipamento !== undefined) setVideoEquipamento(draft.videoEquipamento);
       if (draft.materiaisUtilizados !== undefined) setMateriaisUtilizados(draft.materiaisUtilizados);
       if (draft.respostas !== undefined) setRespostas(draft.respostas);
 
@@ -582,10 +603,11 @@ export const ChecklistPreenchimento: React.FC = () => {
         metadata,
         respostas: cleanRespostas,
         fotosEquipamento,
+        videoEquipamento,
         materiaisUtilizados,
         observacoesGerais,
         currentStep,
-        dirty: true, 
+        dirty: true,
         localUpdatedAt: new Date().toISOString(),
       };
 
@@ -593,7 +615,7 @@ export const ChecklistPreenchimento: React.FC = () => {
     }, 300);
 
     return () => clearTimeout(t);
-  }, [respostas, fotosEquipamento, materiaisUtilizados, observacoesGerais, currentStep, draftLoaded, id, metadata]);
+  }, [respostas, fotosEquipamento, videoEquipamento, materiaisUtilizados, observacoesGerais, currentStep, draftLoaded, id, metadata]);
 
   // Semeia o snapshot de sync a partir de um rascunho já sincronizado
   // (evita reenviar todos os itens ao reabrir um rascunho limpo).
@@ -876,6 +898,7 @@ export const ChecklistPreenchimento: React.FC = () => {
         certificadoValidade: value.certificadoValidade || undefined,
         fotoUrl: value.fotoUrl || undefined,
         fotosUrls: value.fotosUrls && value.fotosUrls.length > 0 ? value.fotosUrls : undefined,
+        videoUrl: value.videoUrl || undefined,
         pendenciaResolvida: value.pendenciaResolvida !== undefined ? value.pendenciaResolvida : undefined,
         fotoResolvidaUrl: value.fotoResolvidaUrl || undefined,
       }));
@@ -888,7 +911,7 @@ export const ChecklistPreenchimento: React.FC = () => {
         observacao: mat.observacao || undefined,
       }));
 
-      const novaInspecao: any = {
+      const basePayload: any = {
         id,
         equipamentoId: equipamento.id,
         tipo: metadata.tipo,
@@ -896,7 +919,6 @@ export const ChecklistPreenchimento: React.FC = () => {
         modeloId: modelo.id,
         modeloVersao: modelo.versao,
         responsavelGeral: metadata.responsavelGeral,
-        status: 'CONCLUIDA',
         observacoesGerais: observacoesGerais ? maiusculas(observacoesGerais) : undefined,
         assinaturaUrl: assinaturaUrl || undefined,
         respostas: finalRespostas,
@@ -906,22 +928,60 @@ export const ChecklistPreenchimento: React.FC = () => {
         compressorUtilizado: metadata.compressorUtilizado,
         classificacao: metadata.classificacao,
         fotosUrls: fotosEquipamento.filter((f): f is string => !!f),
+        videoUrl: videoEquipamento || undefined,
       };
 
-      await api.inspecoes.upsert(id, novaInspecao);
+      // 1. Persiste TUDO como EM_ANDAMENTO (reversível) — base do preflight.
+      //    Se este passo falhar, paramos antes de calcular integridade.
+      await api.inspecoes.upsert(id, { ...basePayload, status: 'EM_ANDAMENTO' });
 
-      localStorage.removeItem(`cme_draft_${id}`);
-      const draftsRaw = localStorage.getItem('cme_drafts');
-      const drafts: string[] = draftsRaw ? JSON.parse(draftsRaw) : [];
-      const updatedDrafts = drafts.filter((d) => d !== id);
-      localStorage.setItem('cme_drafts', JSON.stringify(updatedDrafts));
+      // 2. Integridade real (já com assinatura/fotos/vídeo no servidor).
+      let report: IntegridadeReport | null = null;
+      try {
+        report = await api.inspecoes.integridade(id);
+      } catch {
+        report = null; // sem report não bloqueia — segue a conclusão.
+      }
 
-      alert('Inspeção concluída com sucesso e enviada ao servidor! ✅');
-      navigate('/');
+      // 3. Reprovado: abre o preflight com as pendências (não conclui ainda).
+      if (report && !report.aprovado) {
+        payloadConclusaoRef.current = basePayload;
+        setPreflightReport(report);
+        setShowPreflight(true);
+        setSavingCompleted(false);
+        return;
+      }
+
+      // 4. Aprovado (ou sem report): conclui.
+      await finalizarConclusao(basePayload, false);
     } catch (err: any) {
       console.error('Failed to conclude checklist:', err);
       setError(err.message || 'Falha ao conectar com o servidor. A inspeção foi mantida como rascunho local.');
-      alert('Falha no envio final. A inspeção permanecerá salva no seu painel como rascunho para re-envio.');
+      showFeedback('error', 'Erro ao salvar respostas. Verifique a conexão e tente novamente.');
+      setSavingCompleted(false);
+    }
+  };
+
+  // Finaliza a inspeção: grava status CONCLUIDA, limpa rascunho e navega.
+  const finalizarConclusao = async (payload: any, comPendencias: boolean) => {
+    setSavingCompleted(true);
+    try {
+      await api.inspecoes.upsert(payload.id, { ...payload, status: 'CONCLUIDA' });
+
+      localStorage.removeItem(`cme_draft_${payload.id}`);
+      const draftsRaw = localStorage.getItem('cme_drafts');
+      const drafts: string[] = draftsRaw ? JSON.parse(draftsRaw) : [];
+      localStorage.setItem('cme_drafts', JSON.stringify(drafts.filter((d) => d !== payload.id)));
+
+      setShowPreflight(false);
+      showFeedback(
+        comPendencias ? 'warning' : 'success',
+        comPendencias ? 'Inspeção concluída com pendências.' : 'Inspeção concluída com sucesso!'
+      );
+      setTimeout(() => navigate('/'), 1300);
+    } catch (err: any) {
+      console.error('Failed to finalize checklist:', err);
+      showFeedback('error', err?.message || 'Falha no envio final. Mantida como rascunho para reenvio.');
       setSavingCompleted(false);
     }
   };
@@ -1005,6 +1065,10 @@ export const ChecklistPreenchimento: React.FC = () => {
         if (respondido && resp?.status === 'PENDENTE') {
           respondido = !!(resp.observacao && resp.observacao.trim());
         }
+        // Não-aplicável exige justificativa na observação.
+        if (respondido && resp?.status === 'NAO_APLICAVEL') {
+          respondido = !!(resp.observacao && resp.observacao.trim());
+        }
       } else if (tipo === 'MEDICAO') {
         respondido = resp?.valorNumerico !== undefined && resp?.valorNumerico !== null;
       } else if (tipo === 'TEXTO') {
@@ -1023,13 +1087,14 @@ export const ChecklistPreenchimento: React.FC = () => {
       const pendingItems = modelo?.itens?.filter(it => respostas[it.id]?.status === 'PENDENTE') || [];
       const ok = pendingItems.every(it => {
         const r = respostas[it.id];
-        return r && r.pendenciaResolvida !== undefined && !!r.fotoResolvidaUrl;
+        return r && r.pendenciaResolvida !== undefined && !!(r.fotoResolvidaUrl || r.videoUrl);
       });
       return ok ? 'concluida' : 'pendente';
     }
 
     if (step.type === 'equip_photos') {
-      return fotosEquipamento.every(f => !!f) ? 'concluida' : 'pendente';
+      // Pelo menos uma evidência (foto ou vídeo) do equipamento.
+      return (fotosEquipamento.some(f => !!f) || !!videoEquipamento) ? 'concluida' : 'pendente';
     }
 
     if (step.type === 'observations') {
@@ -1292,18 +1357,30 @@ export const ChecklistPreenchimento: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-[10px] font-bold text-muted uppercase mb-1">
-                    Observações {resp.status === 'PENDENTE' && <span className="text-red-500">*</span>}
+                    {resp.status === 'NAO_APLICAVEL' ? 'Justificativa' : 'Observações'}{' '}
+                    {(resp.status === 'PENDENTE' || resp.status === 'NAO_APLICAVEL') && <span className="text-red-500">*</span>}
                   </label>
                   <input
                     type="text"
-                    placeholder={resp.status === 'PENDENTE' ? "O que está pendente? (Obrigatório)..." : "Descreva observações do item (opcional)..."}
+                    placeholder={
+                      resp.status === 'PENDENTE'
+                        ? 'O que está pendente? (Obrigatório)...'
+                        : resp.status === 'NAO_APLICAVEL'
+                        ? 'Por que não se aplica? (Obrigatório)...'
+                        : 'Descreva observações do item (opcional)...'
+                    }
                     className={cn(
                       'w-full px-3 py-2.5 border rounded-lg text-xs bg-surface text-content placeholder:text-muted/70 outline-none focus:ring-2 focus:ring-accent/50',
-                      resp.status === 'PENDENTE' && !resp.observacao.trim() ? 'border-red-300 dark:border-red-500/50 focus:ring-red-200' : 'border-border'
+                      (resp.status === 'PENDENTE' || resp.status === 'NAO_APLICAVEL') && !resp.observacao.trim()
+                        ? 'border-red-300 dark:border-red-500/50 focus:ring-red-200'
+                        : 'border-border'
                     )}
                     value={resp.observacao}
                     onChange={(e) => handleObsChange(item.id, e.target.value)}
                   />
+                  {resp.status === 'NAO_APLICAVEL' && !resp.observacao.trim() && (
+                    <p className="text-[9px] text-red-500 font-semibold mt-1">Justificativa obrigatória para itens não aplicáveis.</p>
+                  )}
                 </div>
 
                 {/* Adicionar Responsável */}
@@ -1518,33 +1595,40 @@ export const ChecklistPreenchimento: React.FC = () => {
                           <span className="text-[10px] font-bold text-muted mb-2 w-full text-left">
                             Evidência (foto/vídeo) <span className="text-red-500">*</span>
                           </span>
-                          {resp.fotoResolvidaUrl ? (
-                            <div className="relative inline-block">
-                              {resp.fotoResolvidaUrl.includes('video-') || resp.fotoResolvidaUrl.endsWith('.webm') || resp.fotoResolvidaUrl.startsWith('data:video/') ? (
-                                <video
-                                  src={api.mediaUrl(resp.fotoResolvidaUrl)}
-                                  controls
-                                  className="h-24 w-40 object-cover rounded-lg border border-border shadow-sm"
-                                />
-                              ) : (
-                                <img
-                                  src={api.mediaUrl(resp.fotoResolvidaUrl)}
-                                  alt="Reparo resolvido"
-                                  className="h-24 w-40 object-cover rounded-lg border border-border shadow-sm"
-                                />
+                          {(resp.fotoResolvidaUrl || resp.videoUrl) ? (
+                            <div className="flex flex-wrap gap-2 w-full">
+                              {resp.fotoResolvidaUrl && (
+                                <div className="relative inline-block">
+                                  <img
+                                    src={api.mediaUrl(resp.fotoResolvidaUrl)}
+                                    alt="Reparo resolvido (foto)"
+                                    className="h-24 w-40 object-cover rounded-lg border border-border shadow-sm"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setRespostas(prev => ({ ...prev, [item.id]: { ...prev[item.id], fotoResolvidaUrl: undefined } }))}
+                                    className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700"
+                                  >
+                                    <Trash size={12} />
+                                  </button>
+                                </div>
                               )}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setRespostas(prev => ({
-                                    ...prev,
-                                    [item.id]: { ...prev[item.id], fotoResolvidaUrl: undefined }
-                                  }));
-                                }}
-                                className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700"
-                              >
-                                <Trash size={12} />
-                              </button>
+                              {resp.videoUrl && (
+                                <div className="relative inline-block">
+                                  <video
+                                    src={api.mediaUrl(resp.videoUrl)}
+                                    controls
+                                    className="h-24 w-40 object-cover rounded-lg border border-border shadow-sm"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setRespostas(prev => ({ ...prev, [item.id]: { ...prev[item.id], videoUrl: undefined } }))}
+                                    className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700"
+                                  >
+                                    <Trash size={12} />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ) : recordingVideo ? (
                             <div className="flex flex-col items-center justify-center p-3 w-full">
@@ -1575,13 +1659,13 @@ export const ChecklistPreenchimento: React.FC = () => {
                                   }}
                                 />
                               </label>
-                              
+
                               <button
                                 type="button"
                                 onClick={() => startVideoRecording((url) => {
                                   setRespostas(prev => ({
                                     ...prev,
-                                    [item.id]: { ...prev[item.id], fotoResolvidaUrl: url }
+                                    [item.id]: { ...prev[item.id], videoUrl: url }
                                   }));
                                 })}
                                 className="flex flex-col items-center justify-center cursor-pointer gap-1.5 py-3 flex-1 border border-dashed border-border rounded-xl hover:bg-surface bg-surface min-h-[64px]"
@@ -1612,31 +1696,20 @@ export const ChecklistPreenchimento: React.FC = () => {
               Evidências Gerais
             </span>
             <h2 className="text-sm font-bold text-content mt-3">Evidências do Equipamento</h2>
-            <p className="text-[11px] text-muted mt-1">Anexe exatamente 3 mídias (fotos ou vídeos) para liberação do equipamento.</p>
+            <p className="text-[11px] text-muted mt-1">Anexe fotos do equipamento e, opcionalmente, um vídeo.</p>
           </div>
 
+          {/* Fotos (3 slots — somente foto) */}
           <div className="grid grid-cols-3 gap-2">
             {[0, 1, 2].map(idx => {
-              const label = idx === 0 ? 'Mídia 1' : idx === 1 ? 'Mídia 2' : 'Mídia 3';
+              const label = `Foto ${idx + 1}`;
               const foto = fotosEquipamento[idx];
               return (
                 <div key={idx} className="bg-surface rounded-2xl border border-border p-3 flex flex-col items-center justify-center min-h-[140px] text-center shadow-sm space-y-2">
                   <span className="text-[9px] font-extrabold text-muted uppercase tracking-widest">{label}</span>
                   {foto ? (
                     <div className="relative w-full aspect-square flex items-center justify-center bg-surface-2 border border-border rounded-lg overflow-hidden">
-                      {foto.includes('video-') || foto.endsWith('.webm') || foto.startsWith('data:video/') ? (
-                        <video
-                          src={api.mediaUrl(foto)}
-                          controls
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <img
-                          src={api.mediaUrl(foto)}
-                          alt={label}
-                          className="w-full h-full object-cover"
-                        />
-                      )}
+                      <img src={api.mediaUrl(foto)} alt={label} className="w-full h-full object-cover" />
                       <button
                         type="button"
                         onClick={() => {
@@ -1651,56 +1724,65 @@ export const ChecklistPreenchimento: React.FC = () => {
                         <Trash size={10} />
                       </button>
                     </div>
-                  ) : recordingVideo ? (
-                    <div className="flex flex-col items-center justify-center p-2 w-full aspect-square">
-                      <div className="h-2.5 w-2.5 rounded-full bg-red-600 animate-pulse mb-1" />
-                      <span className="text-[8px] font-bold text-red-600 dark:text-red-400 mb-1">Gravando...</span>
-                      <button type="button" onClick={stopVideoRecording} className="bg-red-600 text-white text-[8px] py-1 px-2 rounded font-bold">
-                        Parar
-                      </button>
-                    </div>
                   ) : (
-                    <div className="flex flex-col w-full aspect-square gap-1">
-                      <label className="flex flex-col items-center justify-center border border-dashed border-border rounded-lg cursor-pointer bg-surface-2 hover:bg-surface-2/80 transition flex-1">
-                        <Camera className="h-4 w-4 text-accent" />
-                        <span className="text-[8px] font-bold text-accent-text uppercase mt-0.5">Foto</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const url = await handleUploadFile(file, `foto-equip-${idx}-${Date.now()}.jpg`);
-                              setFotosEquipamento(prev => {
-                                const updated = [...prev];
-                                updated[idx] = url;
-                                return updated;
-                              });
-                            }
-                          }}
-                        />
-                      </label>
-                      
-                      <button
-                        type="button"
-                        onClick={() => startVideoRecording((url) => {
-                          setFotosEquipamento(prev => {
-                            const updated = [...prev];
-                            updated[idx] = url;
-                            return updated;
-                          });
-                        })}
-                        className="flex flex-col items-center justify-center border border-dashed border-border rounded-lg cursor-pointer bg-surface-2 hover:bg-surface-2/80 transition flex-1 text-red-600"
-                      >
-                        <span className="text-[12px] font-bold">●</span>
-                        <span className="text-[8px] font-bold text-red-600 dark:text-red-400 uppercase">Vídeo</span>
-                      </button>
-                    </div>
+                    <label className="flex flex-col items-center justify-center w-full aspect-square border border-dashed border-border rounded-lg cursor-pointer bg-surface-2 hover:bg-surface-2/80 transition">
+                      <Camera className="h-5 w-5 text-accent" />
+                      <span className="text-[8px] font-bold text-accent-text uppercase mt-0.5">Tirar Foto</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const url = await handleUploadFile(file, `foto-equip-${idx}-${Date.now()}.jpg`);
+                            setFotosEquipamento(prev => {
+                              const updated = [...prev];
+                              updated[idx] = url;
+                              return updated;
+                            });
+                          }
+                        }}
+                      />
+                    </label>
                   )}
                 </div>
               );
             })}
+          </div>
+
+          {/* Vídeo do equipamento (opcional, dedicado — separado das fotos) */}
+          <div className="bg-surface rounded-2xl border border-border p-3 shadow-sm">
+            <span className="text-[9px] font-extrabold text-muted uppercase tracking-widest block mb-2">Vídeo do Equipamento (opcional)</span>
+            {videoEquipamento ? (
+              <div className="relative w-full">
+                <video src={api.mediaUrl(videoEquipamento)} controls className="w-full max-h-52 object-cover rounded-lg border border-border" />
+                <button
+                  type="button"
+                  onClick={() => setVideoEquipamento(undefined)}
+                  className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700 active:scale-90"
+                >
+                  <Trash size={12} />
+                </button>
+              </div>
+            ) : recordingVideo ? (
+              <div className="flex flex-col items-center justify-center p-4">
+                <div className="h-3 w-3 rounded-full bg-red-600 animate-pulse mb-2" />
+                <span className="text-[10px] font-bold text-red-600 dark:text-red-400 mb-2">Gravando Vídeo (Máx 60s)...</span>
+                <button type="button" onClick={stopVideoRecording} className="bg-red-600 text-white text-[10px] py-2 px-4 rounded-lg font-bold min-h-[44px]">
+                  Parar Gravação
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => startVideoRecording((url) => setVideoEquipamento(url))}
+                className="flex items-center justify-center gap-2 w-full py-3 border border-dashed border-border rounded-lg bg-surface-2 hover:bg-surface-2/80 transition text-red-600 min-h-[56px]"
+              >
+                <span className="text-[14px] font-bold">●</span>
+                <span className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase">Gravar Vídeo</span>
+              </button>
+            )}
           </div>
         </div>
       );
@@ -1925,6 +2007,137 @@ export const ChecklistPreenchimento: React.FC = () => {
             </div>
         )
       }
+
+      {/* Toast de feedback (sucesso/aviso/erro) */}
+      <AnimatePresence>
+        {feedbackMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-4 inset-x-4 z-[120] flex items-center justify-between gap-3 px-4 py-3 rounded-2xl shadow-lg text-xs font-bold"
+            style={{
+              backgroundColor:
+                feedbackMsg.type === 'success' ? '#dcfce7' : feedbackMsg.type === 'warning' ? '#fef3c7' : '#fee2e2',
+              color:
+                feedbackMsg.type === 'success' ? '#15803d' : feedbackMsg.type === 'warning' ? '#b45309' : '#b91c1c',
+            }}
+          >
+            <span className="flex items-center gap-2">
+              {feedbackMsg.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : feedbackMsg.type === 'warning' ? <AlertTriangle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+              {feedbackMsg.text}
+            </span>
+            <button onClick={() => setFeedbackMsg(null)} className="opacity-60 hover:opacity-100">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Preflight: bottom sheet com as pendências antes de concluir */}
+      <AnimatePresence>
+        {showPreflight && preflightReport && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[130] flex items-end justify-center bg-black/50"
+            onClick={() => { setShowPreflight(false); }}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="bg-surface w-full max-w-lg rounded-t-3xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <h3 className="text-sm font-extrabold text-content">Inspeção com pendências</h3>
+              </div>
+              <p className="text-[11px] text-muted">
+                Esta inspeção ainda tem itens ou evidências faltando. Você pode voltar e corrigir ou concluir mesmo assim —
+                mas inspeções com pendências <strong>não poderão ser validadas pelo gestor</strong>.
+              </p>
+
+              {/* Status gerais */}
+              <div className="space-y-1.5">
+                <div className={cn('flex items-center gap-2 text-[11px] font-semibold', preflightReport.temAssinatura ? 'text-green-600' : 'text-red-500')}>
+                  {preflightReport.temAssinatura ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                  {preflightReport.temAssinatura ? 'Assinatura registrada' : 'Assinatura ausente'}
+                </div>
+                <div className={cn('flex items-center gap-2 text-[11px] font-semibold', preflightReport.temFotosOuVideoEquipamento ? 'text-green-600' : 'text-red-500')}>
+                  {preflightReport.temFotosOuVideoEquipamento ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                  {preflightReport.temFotosOuVideoEquipamento ? 'Fotos/vídeo do equipamento' : 'Sem foto/vídeo do equipamento'}
+                </div>
+              </div>
+
+              {preflightReport.itensObrigatoriosPendentes.length > 0 && (
+                <div>
+                  <span className="block text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">
+                    Itens obrigatórios ({preflightReport.itensObrigatoriosPendentes.length})
+                  </span>
+                  <ul className="space-y-1">
+                    {preflightReport.itensObrigatoriosPendentes.map((it) => (
+                      <li key={it.itemId} className="text-[11px] text-red-600 bg-red-500/5 border border-red-500/20 rounded-lg px-2 py-1">
+                        <span className="font-bold">{it.secao}:</span> {it.descricao}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {preflightReport.evidenciasFaltantes.length > 0 && (
+                <div>
+                  <span className="block text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-1">
+                    Evidências faltantes ({preflightReport.evidenciasFaltantes.length})
+                  </span>
+                  <ul className="space-y-1">
+                    {preflightReport.evidenciasFaltantes.map((ev) => (
+                      <li key={ev.itemId} className="text-[11px] text-amber-700 bg-amber-500/5 border border-amber-500/20 rounded-lg px-2 py-1">
+                        {ev.descricao} — <span className="italic">{ev.motivo}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {preflightReport.certificadosVencidos.length > 0 && (
+                <div>
+                  <span className="block text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">
+                    Certificados vencidos ({preflightReport.certificadosVencidos.length})
+                  </span>
+                  <ul className="space-y-1">
+                    {preflightReport.certificadosVencidos.map((c) => (
+                      <li key={c.itemId} className="text-[11px] text-red-600 bg-red-500/5 border border-red-500/20 rounded-lg px-2 py-1">
+                        {c.descricao}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowPreflight(false)}
+                  className="flex-1 py-3 rounded-xl bg-accent text-white font-bold text-xs min-h-[48px] active:scale-[0.98] transition"
+                >
+                  Voltar e corrigir
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { if (payloadConclusaoRef.current) finalizarConclusao(payloadConclusaoRef.current, true); }}
+                  className="flex-1 py-3 rounded-xl bg-surface-2 text-content border border-border font-bold text-xs min-h-[48px] active:scale-[0.98] transition"
+                >
+                  Concluir mesmo assim
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -10,11 +10,71 @@ export type StatusInspecao = 'EM_ANDAMENTO' | 'CONCLUIDA' | 'VALIDADA' | 'CANCEL
 // Tipo de inspeção
 export type TipoInspecao = 'PRE_EMBARQUE' | 'OPERACIONAL' | 'RETORNO_EMBARQUE';
 
+// Funções de usuário (RBAC)
+export type Funcao = 'OPERADOR' | 'SUPERVISOR' | 'GESTOR' | 'ADMIN';
+
+// Envelope paginado para listagens
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+// Payloads de criação/edição de usuário
+export interface CreateUserInput {
+  nome: string;
+  cpf?: string;
+  email?: string;
+  funcao: Funcao;
+  senha: string;
+}
+
+export interface UpdateUserInput {
+  nome?: string;
+  cpf?: string;
+  email?: string;
+  funcao?: Funcao;
+  ativo?: boolean;
+}
+
+// Relatório de integridade de uma inspeção (server calcula, web/mobile consomem)
+export interface IntegridadeItemFaltante {
+  itemId: string;
+  secao: string;
+  descricao: string;
+}
+
+export interface IntegridadeEvidenciaFaltante {
+  itemId: string;
+  descricao: string;
+  motivo: string;
+}
+
+export interface IntegridadeCertificadoVencido {
+  itemId: string;
+  descricao: string;
+}
+
+export interface IntegridadeReport {
+  completude: number; // 0-100%
+  totalItens: number;
+  itensRespondidos: number;
+  itensObrigatoriosPendentes: IntegridadeItemFaltante[];
+  evidenciasFaltantes: IntegridadeEvidenciaFaltante[];
+  certificadosVencidos: IntegridadeCertificadoVencido[];
+  temAssinatura: boolean;
+  temFotosOuVideoEquipamento: boolean;
+  aprovado: boolean;
+}
+
 export interface User {
   id: string;
   nome: string;
-  email: string;
-  funcao?: string; // OPERADOR | SUPERVISOR | GESTOR | ADMIN
+  cpf?: string;
+  email?: string;
+  funcao?: string;
   ativo?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -90,6 +150,7 @@ export interface RespostaItem {
   fotoBase64?: string; // Mantido por compatibilidade
   fotoUrl?: string; // URL do Drive (produção)
   fotosUrls?: string[]; // evidências por pergunta (até 6)
+  videoUrl?: string; // vídeo de evidência (separado de fotosUrls)
   pendenciaResolvida?: boolean; // Se a pendência foi resolvida em campo
   /** @deprecated Use fotoResolvidaUrl instead */
   fotoResolvidaBase64?: string; // Foto da pendência resolvida
@@ -147,6 +208,7 @@ export interface Inspecao {
   classificacao?: string;
   fotosEquipamento?: string[]; // Três fotos obrigatórias do equipamento
   fotosUrls?: string[]; // URLs do Drive (produção)
+  videoUrl?: string; // vídeo geral do equipamento (separado de fotosUrls)
 }
 
 // Util central de normalização 

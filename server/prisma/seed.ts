@@ -14,15 +14,16 @@ async function main() {
   await prisma.user.deleteMany();
   // Equipamentos NÃO são semeados aqui: vêm da importação da planilha (Fase 1).
 
-  console.log('Seeding Users (usuário de teste)...');
-  // Credencial de teste: Lucas Lima / 321 (Gestor). Usuários reais recebem senha própria.
+  console.log('Seeding Users (administrador geral)...');
+  // Credencial do dono do sistema: Lucas Lima / 321 (Admin — pode criar qualquer função).
+  // Login por nome ("Lucas Lima"), e-mail ou CPF. Usuários reais recebem senha própria.
   const senhaHash = await bcrypt.hash('321', 10);
   await prisma.user.create({
     data: {
       id: 'usr-lucas',
       nome: 'Lucas Lima',
       email: 'lucas.lima@cme.local',
-      funcao: 'GESTOR',
+      funcao: 'ADMIN',
       senhaHash,
       ativo: true,
     },

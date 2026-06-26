@@ -1,7 +1,29 @@
-import { Inspecao, Equipamento, Material, ChecklistModelo, User } from '@cme/types';
+import {
+  Inspecao,
+  Equipamento,
+  Material,
+  ChecklistModelo,
+  User,
+  PaginatedResponse,
+  CreateUserInput,
+  UpdateUserInput,
+  IntegridadeReport,
+} from '@cme/types';
 
 const TOKEN_KEY = 'cme_token';
 const USER_KEY = 'cme_current_user';
+
+// Preserva status + corpo estruturado do erro (ex.: relatório de integridade no 422).
+export class ApiError<T = any> extends Error {
+  status: number;
+  data?: T;
+  constructor(status: number, message: string, data?: T) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
 
 const getApiUrl = (path: string) => {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
@@ -47,14 +69,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!response.ok) {
-    let msg = response.statusText;
-    try {
-      const body = await response.json();
-      if (body?.error) msg = body.error;
-    } catch {
-      /* ignore */
-    }
-    throw new Error(msg || 'Erro na chamada da API.');
+    const body = await response.json().catch(() => null);
+    const msg = body?.error || response.statusText || 'Erro na chamada da API.';
+    throw new ApiError(response.status, msg, body);
   }
 
   if (response.status === 204) return null as unknown as T;
@@ -90,6 +107,22 @@ const api = {
     // Concluir -> validar (Gestor): libera o equipamento.
     validar: (id: string): Promise<Inspecao> =>
       request<Inspecao>(`/inspecoes/${encodeURIComponent(id)}/validar`, { method: 'PATCH' }),
+    // Relatório de integridade (completude, evidências, certificados).
+    integridade: (id: string): Promise<IntegridadeReport> =>
+      request<IntegridadeReport>(`/inspecoes/${encodeURIComponent(id)}/integridade`),
+  },
+  users: {
+    list: (page = 1, limit = 20): Promise<PaginatedResponse<User>> =>
+      request<PaginatedResponse<User>>(`/users?page=${page}&limit=${limit}`),
+    create: (data: CreateUserInput): Promise<User> =>
+      request<User>('/users', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: UpdateUserInput): Promise<User> =>
+      request<User>(`/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    resetPassword: (id: string, novaSenha: string): Promise<{ ok: boolean }> =>
+      request<{ ok: boolean }>(`/users/${encodeURIComponent(id)}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ novaSenha }),
+      }),
   },
   auth: {
     login: async (identifier: string, senha: string): Promise<User> => {
@@ -125,15 +158,15 @@ const api = {
     },
     isAuthenticated: (): boolean => !!getToken(),
     logout: (): void => clearSession(),
-    listUsers: (): Promise<User[]> => request<User[]>('/users'),
   },
   auditoria: {
-    list: (entidade?: string, entidadeId?: string): Promise<any[]> => {
+    list: (entidade?: string, entidadeId?: string, page = 1, limit = 20): Promise<PaginatedResponse<any>> => {
       const params = new URLSearchParams();
       if (entidade) params.append('entidade', entidade);
       if (entidadeId) params.append('entidadeId', entidadeId);
-      const query = params.toString() ? `?${params.toString()}` : '';
-      return request<any[]>(`/auditoria${query}`);
+      params.append('page', String(page));
+      params.append('limit', String(limit));
+      return request<PaginatedResponse<any>>(`/auditoria?${params.toString()}`);
     },
   },
   upload: {

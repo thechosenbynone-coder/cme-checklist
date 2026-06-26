@@ -3,9 +3,27 @@ import { prisma } from '../lib/prisma.js';
 import { requireRole } from '../auth.js';
 import { registrarAuditoria } from '../lib/audit.js';
 import { calcularStatusLiberacao } from '../lib/equipamento.js';
+import { calcularIntegridade } from '../lib/integridade.js';
 import { inspecaoSchema, patchRespostasSchema, iniciarInspecaoSchema } from '../schemas.js';
 
 export const inspecoesRouter = Router();
+
+// Carrega a inspeção com respostas + os itens do modelo EXATO usado nela
+// (ISO 9001: rastreabilidade da versão do checklist). Retorna null se não
+// existir; { semModelo: true } se a inspeção não tem modeloId associado.
+async function carregarParaIntegridade(id: string, client: any = prisma) {
+  const inspecao = await client.inspecao.findUnique({
+    where: { id },
+    include: { respostas: true },
+  });
+  if (!inspecao) return { inspecao: null, itens: [], semModelo: false };
+  if (!inspecao.modeloId) return { inspecao, itens: [], semModelo: true };
+  const modelo = await client.checklistModelo.findUnique({
+    where: { id: inspecao.modeloId },
+    include: { itens: { orderBy: { ordem: 'asc' } } },
+  });
+  return { inspecao, itens: modelo?.itens || [], semModelo: false };
+}
 
 // Campos editáveis por resposta (usados no diff/histórico do PATCH granular).
 const CAMPOS_RESPOSTA = [
@@ -19,6 +37,7 @@ const CAMPOS_RESPOSTA = [
   'pendenciaResolvida',
   'fotoUrl',
   'fotosUrls',
+  'videoUrl',
   'fotoResolvidaUrl',
 ] as const;
 
@@ -143,6 +162,24 @@ inspecoesRouter.get('/api/checklist/bootstrap', async (req, res) => {
   }
 });
 
+// GET /api/inspecoes/:id/integridade — relatório de completude/conformidade.
+// Registrada ANTES de /:id (mesmo padrão de /mine e /bootstrap).
+inspecoesRouter.get('/api/inspecoes/:id/integridade', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { inspecao, itens, semModelo } = await carregarParaIntegridade(id);
+    if (!inspecao) return res.status(404).json({ error: 'Inspeção não encontrada.' });
+    if (semModelo) {
+      return res.status(422).json({ error: 'Inspeção sem modelo associado. Não é possível calcular integridade.' });
+    }
+    const report = calcularIntegridade(inspecao, itens);
+    res.json(report);
+  } catch (error: any) {
+    console.error('Error computing integrity:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
 // PUT /api/inspecoes/:id — upsert idempotente
 inspecoesRouter.put('/api/inspecoes/:id', async (req, res) => {
   try {
@@ -174,6 +211,7 @@ inspecoesRouter.put('/api/inspecoes/:id', async (req, res) => {
         observacoesGerais: rest.observacoesGerais,
         assinaturaUrl: rest.assinaturaUrl || null,
         fotosUrls: rest.fotosUrls || rest.fotosEquipamento || [],
+        videoUrl: rest.videoUrl || null,
         origem: rest.origem || null,
         destino: rest.destino || null,
         compressorUtilizado: rest.compressorUtilizado || null,
@@ -234,6 +272,7 @@ inspecoesRouter.put('/api/inspecoes/:id', async (req, res) => {
               createdById: r.createdById || null,
               fotoUrl: r.fotoUrl || null,
               fotosUrls: r.fotosUrls || [],
+              videoUrl: r.videoUrl || null,
               fotoResolvidaUrl: r.fotoResolvidaUrl || null,
               certificadoId: r.certificadoId || null,
               certificadoValidade: r.certificadoValidade || null,
@@ -248,6 +287,7 @@ inspecoesRouter.put('/api/inspecoes/:id', async (req, res) => {
               createdById: r.createdById || null,
               fotoUrl: r.fotoUrl || null,
               fotosUrls: r.fotosUrls || [],
+              videoUrl: r.videoUrl || null,
               fotoResolvidaUrl: r.fotoResolvidaUrl || null,
               certificadoId: r.certificadoId || null,
               certificadoValidade: r.certificadoValidade || null,
@@ -274,7 +314,8 @@ inspecoesRouter.put('/api/inspecoes/:id', async (req, res) => {
       return savedInspecao;
     });
 
-    // Auditoria: ONLY log when status = CONCLUIDA
+    // Auditoria + gate suave: ao concluir, calcula integridade e devolve como
+    // aviso (não bloqueia — operador de campo pode ter baixa conectividade).
     if (result.status === 'CONCLUIDA') {
       await registrarAuditoria(
         req.user?.sub,
@@ -284,6 +325,10 @@ inspecoesRouter.put('/api/inspecoes/:id', async (req, res) => {
         result.id,
         { status: result.status, numeroDocumento: result.numeroDocumento, upsert: true }
       );
+
+      const { inspecao, itens, semModelo } = await carregarParaIntegridade(id);
+      const _integridade = semModelo || !inspecao ? null : calcularIntegridade(inspecao, itens);
+      return res.json({ ...result, _integridade });
     }
 
     res.json(result);
@@ -349,6 +394,7 @@ inspecoesRouter.post('/api/inspecoes', async (req, res) => {
           createdById: rest.createdById || req.user?.sub || null,
           assinaturaUrl: rest.assinaturaUrl || null,
           fotosUrls: rest.fotosUrls || rest.fotosEquipamento || [],
+          videoUrl: rest.videoUrl || null,
           origem: rest.origem || null,
           destino: rest.destino || null,
           compressorUtilizado: rest.compressorUtilizado || null,
@@ -370,6 +416,7 @@ inspecoesRouter.post('/api/inspecoes', async (req, res) => {
             createdById: r.createdById || null,
             fotoUrl: r.fotoUrl || null,
             fotosUrls: r.fotosUrls || [],
+            videoUrl: r.videoUrl || null,
             fotoResolvidaUrl: r.fotoResolvidaUrl || null,
             certificadoId: r.certificadoId || null,
             certificadoValidade: r.certificadoValidade || null,
@@ -417,6 +464,22 @@ inspecoesRouter.patch('/api/inspecoes/:id/validar', requireRole('GESTOR', 'ADMIN
     if (!inspecao) return res.status(404).json({ error: 'Inspeção não encontrada.' });
     if (inspecao.status === 'VALIDADA') {
       return res.status(409).json({ error: 'Inspeção já validada.' });
+    }
+    if (inspecao.status !== 'CONCLUIDA') {
+      return res.status(409).json({ error: 'Apenas inspeções concluídas podem ser validadas.' });
+    }
+
+    // Gate duro: não libera equipamento com documentação incompleta (ISO 9001).
+    const integridadeCtx = await carregarParaIntegridade(id);
+    if (integridadeCtx.semModelo) {
+      return res.status(422).json({ error: 'Inspeção sem modelo associado. Não é possível validar.' });
+    }
+    const integridade = calcularIntegridade(integridadeCtx.inspecao, integridadeCtx.itens);
+    if (!integridade.aprovado) {
+      return res.status(422).json({
+        error: 'A inspeção não atende aos critérios de integridade.',
+        integridade,
+      });
     }
 
     const atualizada = await prisma.$transaction(async (tx) => {
