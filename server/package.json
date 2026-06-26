@@ -15,6 +15,7 @@
     "import:equipamentos:dry": "tsx src/scripts/importEquipamentos.ts --dry-run"
   },
   "dependencies": {
+    "@cme/types": "*",
     "@prisma/client": "^5.15.0",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
