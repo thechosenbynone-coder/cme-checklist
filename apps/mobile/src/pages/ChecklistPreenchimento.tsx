@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Save, Plus, Trash, ShieldCheck, ChevronRight, ChevronLeft, Camera, Pin, Check, ArrowLeft, X, CheckCircle2, XCircle } from 'lucide-react';
+import { AlertTriangle, Save, Plus, Trash, ShieldCheck, ChevronRight, Camera, Pin, Check, ArrowLeft, X, CheckCircle2, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '../components/ui/Card';
 import { StatusChip } from '../components/ui/StatusChip';
