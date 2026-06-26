@@ -2,18 +2,7 @@
 // Função pura: recebe a inspeção (com respostas) + os itens do modelo exato
 // associado à inspeção e retorna um relatório de completude/conformidade.
 // Sem efeitos colaterais — permite testes determinísticos via `opts.agora`.
-
-export interface IntegridadeReport {
-  completude: number; // 0-100%
-  totalItens: number;
-  itensRespondidos: number;
-  itensObrigatoriosPendentes: { itemId: string; secao: string; descricao: string }[];
-  evidenciasFaltantes: { itemId: string; descricao: string; motivo: string }[];
-  certificadosVencidos: { itemId: string; descricao: string }[];
-  temAssinatura: boolean;
-  temFotosOuVideoEquipamento: boolean;
-  aprovado: boolean;
-}
+import type { Inspecao, ItemChecklist, RespostaItem, IntegridadeReport } from '@cme/types';
 
 export interface IntegridadeOpts {
   agora?: Date;       // default: new Date()
@@ -54,15 +43,15 @@ function certificadoVencido(validade: string | null | undefined, agora: Date, ti
 const naoVazio = (s: unknown): boolean => typeof s === 'string' && s.trim().length > 0;
 
 export function calcularIntegridade(
-  inspecao: any,
-  itens: any[],
+  inspecao: Inspecao,
+  itens: ItemChecklist[],
   opts: IntegridadeOpts = {}
 ): IntegridadeReport {
   const agora = opts.agora ?? new Date();
   const timezone = opts.timezone ?? BUSINESS_TIMEZONE;
 
-  const respostas: any[] = inspecao.respostas || [];
-  const respostaPorItem = new Map<string, any>();
+  const respostas: RespostaItem[] = inspecao.respostas || [];
+  const respostaPorItem = new Map<string, RespostaItem>();
   for (const r of respostas) respostaPorItem.set(r.itemId, r);
 
   const obrigatorios = itens.filter((it) => it.obrigatorio);
@@ -98,13 +87,12 @@ export function calcularIntegridade(
       }
       case 'STATUS':
       default: {
-        const status = r?.status ?? null;
-        if (status === null) {
+        if (!r || r.status == null) {
           satisfeito = false;
-        } else if (status === 'NAO_APLICAVEL') {
+        } else if (r.status === 'NAO_APLICAVEL') {
           // N/A exige justificativa em observacao.
           satisfeito = naoVazio(r.observacao);
-        } else if (status === 'PENDENTE') {
+        } else if (r.status === 'PENDENTE') {
           // PENDENTE é "respondido", mas só satisfaz se a pendência foi
           // resolvida em campo com evidência (foto OU vídeo da resolução).
           const temEvidencia = naoVazio(r.fotoResolvidaUrl) || naoVazio(r.videoUrl);
