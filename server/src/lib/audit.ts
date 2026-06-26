@@ -3,8 +3,10 @@ import { prisma } from './prisma.js';
 export async function registrarAuditoria(
   userId: string | null | undefined,
   userNome: string | null | undefined,
-  acao: 'CRIAR_INSPECAO' | 'VALIDAR_INSPECAO' | 'EDITAR_TEMPLATE',
-  entidade: 'INSPECAO' | 'CHECKLIST_MODELO',
+  acao:
+    | 'CRIAR_INSPECAO' | 'VALIDAR_INSPECAO' | 'EDITAR_TEMPLATE'
+    | 'CRIAR_USUARIO' | 'EDITAR_USUARIO' | 'RESET_SENHA' | 'DESATIVAR_USUARIO' | 'REATIVAR_USUARIO',
+  entidade: 'INSPECAO' | 'CHECKLIST_MODELO' | 'USER',
   entidadeId: string | null | undefined,
   detalhe?: any
 ) {

@@ -8,9 +8,20 @@ import {
   History,
   Loader2,
   CheckCircle2,
+  Users,
+  UserPlus,
+  Pencil,
+  KeyRound,
+  X,
+  AlertCircle,
+  ShieldCheck,
+  ShieldX,
 } from 'lucide-react';
-import api from '../services/api';
-import { ChecklistModelo, ItemChecklist, TipoItem } from '@cme/types';
+import api, { ApiError } from '../services/api';
+import { ChecklistModelo, ItemChecklist, TipoItem, User, Funcao } from '@cme/types';
+
+// Auto-dismiss padrão para banners de sucesso (erros são persistentes).
+const SUCCESS_DISMISS_MS = 4000;
 
 type ItemEdit = {
   secao: string;
@@ -38,7 +49,7 @@ const TIPO_CLS: Record<string, string> = {
 export const Configuracoes: React.FC = () => {
   const currentUser = useMemo(() => api.auth.currentUser(), []);
   const showAuditoriaTab = currentUser?.funcao === 'GESTOR' || currentUser?.funcao === 'ADMIN';
-  const [tab, setTab] = useState<'modelos' | 'auditoria'>('modelos');
+  const [tab, setTab] = useState<'modelos' | 'usuarios' | 'auditoria'>('modelos');
   const [modelos, setModelos] = useState<ChecklistModelo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
@@ -179,6 +190,16 @@ export const Configuracoes: React.FC = () => {
             Modelos de Checklist
           </button>
           <button
+            onClick={() => setTab('usuarios')}
+            className={`px-4 py-2 rounded-full text-xs font-bold transition-all duration-200 flex items-center gap-1.5 ${
+              tab === 'usuarios'
+                ? 'bg-[#0b132b] text-white shadow-sm'
+                : 'bg-white text-slate-500 hover:text-slate-900 border border-slate-200/60'
+            }`}
+          >
+            <Users className="h-3.5 w-3.5" /> Gestão de Usuários
+          </button>
+          <button
             onClick={() => setTab('auditoria')}
             className={`px-4 py-2 rounded-full text-xs font-bold transition-all duration-200 ${
               tab === 'auditoria'
@@ -191,7 +212,9 @@ export const Configuracoes: React.FC = () => {
         </div>
       )}
 
-      {tab === 'modelos' ? (
+      {tab === 'usuarios' ? (
+        <GestaoUsuarios atorFuncao={(currentUser?.funcao || 'OPERADOR') as Funcao} atorId={currentUser?.id || ''} />
+      ) : tab === 'modelos' ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Lista de templates */}
           <div className="lg:col-span-1 space-y-3">
@@ -374,7 +397,7 @@ const TrilhaAuditoria: React.FC = () => {
     setErro('');
     api.auditoria
       .list(entidade || undefined)
-      .then((data) => setLogs(data))
+      .then((res) => setLogs(res.data))
       .catch((e) => setErro(e.message || 'Erro ao carregar logs.'))
       .finally(() => setLoading(false));
   };
@@ -399,6 +422,7 @@ const TrilhaAuditoria: React.FC = () => {
             <option value="">Todas as entidades</option>
             <option value="INSPECAO">Inspeções</option>
             <option value="CHECKLIST_MODELO">Modelos de Checklist</option>
+            <option value="USER">Usuários</option>
           </select>
         </div>
       </div>
@@ -434,11 +458,13 @@ const TrilhaAuditoria: React.FC = () => {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-extrabold uppercase ${
-                      log.acao === 'CRIAR_INSPECAO' ? 'bg-blue-50 border border-blue-200 text-blue-700' :
-                      log.acao === 'VALIDAR_INSPECAO' ? 'bg-green-50 border border-green-200 text-green-700' :
+                      log.acao === 'CRIAR_INSPECAO' || log.acao === 'CRIAR_USUARIO' ? 'bg-blue-50 border border-blue-200 text-blue-700' :
+                      log.acao === 'VALIDAR_INSPECAO' || log.acao === 'REATIVAR_USUARIO' ? 'bg-green-50 border border-green-200 text-green-700' :
+                      log.acao === 'DESATIVAR_USUARIO' ? 'bg-red-50 border border-red-200 text-red-700' :
+                      log.acao === 'RESET_SENHA' ? 'bg-amber-50 border border-amber-200 text-amber-700' :
                       'bg-indigo-50 border border-indigo-200 text-indigo-700'
                     }`}>
-                      {log.acao.replace('_', ' ')}
+                      {log.acao.replace(/_/g, ' ')}
                     </span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap font-semibold text-slate-600">
@@ -456,6 +482,535 @@ const TrilhaAuditoria: React.FC = () => {
           </table>
         </div>
       )}
+    </div>
+  );
+};
+
+// ── Gestão de Usuários ────────────────────────────────────────────
+
+const FUNCAO_CLS: Record<string, string> = {
+  OPERADOR: 'bg-slate-100 text-slate-700 border border-slate-200',
+  SUPERVISOR: 'bg-sky-50 text-sky-700 border border-sky-200',
+  GESTOR: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+  ADMIN: 'bg-amber-50 text-amber-700 border border-amber-200',
+};
+
+const FUNCAO_LABEL: Record<string, string> = {
+  OPERADOR: 'Operador',
+  SUPERVISOR: 'Supervisor',
+  GESTOR: 'Gestor',
+  ADMIN: 'Admin',
+};
+
+const formatCpf = (cpf?: string): string => {
+  if (!cpf) return '—';
+  const d = cpf.replace(/\D/g, '');
+  if (d.length !== 11) return cpf;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+};
+
+// Quais funções o ator pode atribuir (espelha a regra do backend).
+const funcoesAtribuiveis = (ator: Funcao): Funcao[] => {
+  if (ator === 'ADMIN') return ['OPERADOR', 'SUPERVISOR', 'GESTOR', 'ADMIN'];
+  if (ator === 'GESTOR') return ['OPERADOR', 'SUPERVISOR'];
+  return [];
+};
+
+const podeGerenciar = (ator: Funcao, alvo?: string): boolean => {
+  if (ator === 'ADMIN') return true;
+  if (ator === 'GESTOR') return alvo === 'OPERADOR' || alvo === 'SUPERVISOR';
+  return false;
+};
+
+type Feedback = { type: 'success' | 'error'; text: string } | null;
+
+const FeedbackBanner: React.FC<{ feedback: Feedback; onClose: () => void }> = ({ feedback, onClose }) => {
+  if (!feedback) return null;
+  const ok = feedback.type === 'success';
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl text-xs font-semibold ${
+        ok ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'
+      }`}
+    >
+      <span className="flex items-center gap-2">
+        {ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
+        {feedback.text}
+      </span>
+      <button onClick={onClose} className="opacity-60 hover:opacity-100" title="Fechar">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+};
+
+const GestaoUsuarios: React.FC<{ atorFuncao: Funcao; atorId: string }> = ({ atorFuncao, atorId }) => {
+  const [usuarios, setUsuarios] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editando, setEditando] = useState<User | null>(null);
+  const [resetUser, setResetUser] = useState<User | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const limit = 20;
+
+  const carregar = (p = page) => {
+    setLoading(true);
+    api.users
+      .list(p, limit)
+      .then((res) => {
+        setUsuarios(res.data);
+        setTotalPages(res.totalPages);
+        setTotal(res.total);
+        setPage(res.page);
+      })
+      .catch((e) => setFeedback({ type: 'error', text: e?.message || 'Erro ao carregar usuários.' }))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    carregar(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-dismiss de sucesso; erros persistem até o usuário fechar.
+  useEffect(() => {
+    if (feedback?.type === 'success') {
+      const t = setTimeout(() => setFeedback(null), SUCCESS_DISMISS_MS);
+      return () => clearTimeout(t);
+    }
+  }, [feedback]);
+
+  const abrirNovo = () => {
+    setEditando(null);
+    setFormOpen(true);
+  };
+  const abrirEdicao = (u: User) => {
+    setEditando(u);
+    setFormOpen(true);
+  };
+
+  const onSaved = (msg: string) => {
+    setFormOpen(false);
+    setFeedback({ type: 'success', text: msg });
+    carregar();
+  };
+  const onResetDone = (msg: string) => {
+    setResetUser(null);
+    setFeedback({ type: 'success', text: msg });
+  };
+
+  const toggleAtivo = async (u: User) => {
+    setTogglingId(u.id);
+    setFeedback(null);
+    try {
+      await api.users.update(u.id, { ativo: !u.ativo });
+      setFeedback({ type: 'success', text: `Usuário ${u.ativo ? 'desativado' : 'reativado'} com sucesso.` });
+      carregar();
+    } catch (e: any) {
+      setFeedback({ type: 'error', text: e?.message || 'Erro ao alterar status do usuário.' });
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-extrabold text-slate-900">Usuários do sistema</h3>
+          <p className="text-[10px] text-slate-400 mt-0.5">
+            Crie e gerencie operadores, supervisores e gestores. Login por CPF, nome ou e-mail.
+          </p>
+        </div>
+        <button
+          onClick={abrirNovo}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#0b132b] text-white hover:bg-[#1b2a47] text-xs font-bold shadow-sm shrink-0"
+        >
+          <UserPlus className="h-4 w-4 text-[#38bdf8]" /> Novo Usuário
+        </button>
+      </div>
+
+      <FeedbackBanner feedback={feedback} onClose={() => setFeedback(null)} />
+
+      <div className="bg-white border border-slate-200/80 rounded-3xl p-2 shadow-sm">
+        {loading ? (
+          <div className="text-center py-12 text-slate-400 text-xs font-semibold">Carregando usuários...</div>
+        ) : usuarios.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 text-xs font-semibold">Nenhum usuário cadastrado.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-100 text-left text-xs">
+              <thead className="text-slate-500 text-[9px] font-extrabold uppercase tracking-wider">
+                <tr>
+                  <th className="px-4 py-3">Nome</th>
+                  <th className="px-4 py-3">CPF</th>
+                  <th className="px-4 py-3">E-mail</th>
+                  <th className="px-4 py-3">Função</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {usuarios.map((u) => {
+                  const gerenciavel = podeGerenciar(atorFuncao, u.funcao);
+                  const isSelf = u.id === atorId;
+                  return (
+                    <tr key={u.id} className="hover:bg-slate-50/55 transition-colors">
+                      <td className="px-4 py-3 font-bold text-slate-800">
+                        {u.nome}
+                        {isSelf && <span className="ml-2 text-[8px] text-slate-400 font-extrabold uppercase">(você)</span>}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-slate-500">{formatCpf(u.cpf)}</td>
+                      <td className="px-4 py-3 text-slate-500">{u.email || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-extrabold uppercase ${FUNCAO_CLS[u.funcao || 'OPERADOR']}`}>
+                          {FUNCAO_LABEL[u.funcao || 'OPERADOR']}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${u.ativo ? 'text-green-600' : 'text-red-500'}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${u.ativo ? 'bg-green-500' : 'bg-red-400'}`} />
+                          {u.ativo ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {gerenciavel && (
+                            <button
+                              onClick={() => abrirEdicao(u)}
+                              className="p-1.5 text-slate-400 hover:text-[#0b132b] hover:bg-slate-100 rounded-lg"
+                              title="Editar"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {(gerenciavel || isSelf) && (
+                            <button
+                              onClick={() => setResetUser(u)}
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                              title="Redefinir senha"
+                            >
+                              <KeyRound className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {gerenciavel && !isSelf && (
+                            <button
+                              onClick={() => toggleAtivo(u)}
+                              disabled={togglingId === u.id}
+                              className={`p-1.5 rounded-lg disabled:opacity-50 ${
+                                u.ativo
+                                  ? 'text-slate-400 hover:text-red-500 hover:bg-red-50'
+                                  : 'text-slate-400 hover:text-green-600 hover:bg-green-50'
+                              }`}
+                              title={u.ativo ? 'Desativar' : 'Reativar'}
+                            >
+                              {togglingId === u.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : u.ativo ? (
+                                <ShieldX className="h-3.5 w-3.5" />
+                              ) : (
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Paginação */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[10px] text-slate-400 font-semibold">
+            {total} usuário{total !== 1 ? 's' : ''} · página {page} de {totalPages}
+          </span>
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => carregar(page - 1)}
+              disabled={page <= 1 || loading}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 disabled:opacity-40 hover:bg-slate-50"
+            >
+              Anterior
+            </button>
+            <button
+              onClick={() => carregar(page + 1)}
+              disabled={page >= totalPages || loading}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 disabled:opacity-40 hover:bg-slate-50"
+            >
+              Próxima
+            </button>
+          </div>
+        </div>
+      )}
+
+      {formOpen && (
+        <UserFormModal
+          user={editando}
+          atorFuncao={atorFuncao}
+          onClose={() => setFormOpen(false)}
+          onSaved={onSaved}
+        />
+      )}
+      {resetUser && (
+        <ResetPasswordModal user={resetUser} onClose={() => setResetUser(null)} onDone={onResetDone} />
+      )}
+    </div>
+  );
+};
+
+const UserFormModal: React.FC<{
+  user: User | null;
+  atorFuncao: Funcao;
+  onClose: () => void;
+  onSaved: (msg: string) => void;
+}> = ({ user, atorFuncao, onClose, onSaved }) => {
+  const editMode = !!user;
+  const [nome, setNome] = useState(user?.nome || '');
+  const [cpf, setCpf] = useState(user?.cpf ? formatCpf(user.cpf) : '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [funcao, setFuncao] = useState<Funcao>((user?.funcao as Funcao) || 'OPERADOR');
+  const [senha, setSenha] = useState('');
+  const [ativo, setAtivo] = useState(user?.ativo ?? true);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const opcoesFuncao = funcoesAtribuiveis(atorFuncao);
+
+  const salvar = async () => {
+    setErro('');
+    if (!nome.trim() || nome.trim().length < 2) {
+      setErro('Informe um nome com ao menos 2 caracteres.');
+      return;
+    }
+    const cpfLimpo = cpf.replace(/\D/g, '');
+    if (cpf && cpfLimpo.length !== 11) {
+      setErro('CPF deve ter 11 dígitos.');
+      return;
+    }
+    if (!editMode && !cpfLimpo && !email.trim()) {
+      setErro('Informe CPF ou e-mail — ao menos um identificador é obrigatório.');
+      return;
+    }
+    if (!editMode && senha.trim().length < 3) {
+      setErro('Senha deve ter ao menos 3 caracteres.');
+      return;
+    }
+
+    setSalvando(true);
+    try {
+      if (editMode && user) {
+        await api.users.update(user.id, {
+          nome: nome.trim(),
+          cpf: cpfLimpo || undefined,
+          email: email.trim() || undefined,
+          funcao,
+          ativo,
+        });
+        onSaved('Usuário atualizado com sucesso.');
+      } else {
+        await api.users.create({
+          nome: nome.trim(),
+          cpf: cpfLimpo || undefined,
+          email: email.trim() || undefined,
+          funcao,
+          senha: senha.trim(),
+        });
+        onSaved('Usuário criado com sucesso.');
+      }
+    } catch (e: any) {
+      const msg = e instanceof ApiError ? e.message : e?.message || 'Erro ao salvar usuário.';
+      setErro(msg);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+            {editMode ? <Pencil className="h-4 w-4 text-[#38bdf8]" /> : <UserPlus className="h-4 w-4 text-[#38bdf8]" />}
+            {editMode ? 'Editar usuário' : 'Novo usuário'}
+          </h3>
+          <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-700">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nome completo</label>
+            <input
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Ex: João da Silva"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">CPF</label>
+              <input
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                value={cpf}
+                onChange={(e) => setCpf(e.target.value)}
+                placeholder="000.000.000-00"
+                inputMode="numeric"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">E-mail (opcional)</label>
+              <input
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="opcional@cme.local"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Função</label>
+              <select
+                value={funcao}
+                onChange={(e) => setFuncao(e.target.value as Funcao)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 bg-white"
+              >
+                {opcoesFuncao.map((f) => (
+                  <option key={f} value={f}>{FUNCAO_LABEL[f]}</option>
+                ))}
+              </select>
+            </div>
+            {!editMode && (
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Senha</label>
+                <input
+                  type="password"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                  value={senha}
+                  onChange={(e) => setSenha(e.target.value)}
+                  placeholder="Mínimo 3 caracteres"
+                />
+              </div>
+            )}
+          </div>
+          {editMode && (
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+              <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
+              Usuário ativo (pode fazer login)
+            </label>
+          )}
+        </div>
+
+        {erro && (
+          <p className="flex items-center gap-2 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {erro}
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-bold"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={salvar}
+            disabled={salvando}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-[#0b132b] text-white hover:bg-[#1b2a47] text-sm font-bold shadow-md disabled:opacity-60"
+          >
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 text-[#38bdf8]" />}
+            {salvando ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ResetPasswordModal: React.FC<{
+  user: User;
+  onClose: () => void;
+  onDone: (msg: string) => void;
+}> = ({ user, onClose, onDone }) => {
+  const [novaSenha, setNovaSenha] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const salvar = async () => {
+    setErro('');
+    if (novaSenha.trim().length < 3) {
+      setErro('Senha deve ter ao menos 3 caracteres.');
+      return;
+    }
+    setSalvando(true);
+    try {
+      await api.users.resetPassword(user.id, novaSenha.trim());
+      onDone(`Senha de ${user.nome} redefinida com sucesso.`);
+    } catch (e: any) {
+      setErro(e?.message || 'Erro ao redefinir senha.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-[#38bdf8]" /> Redefinir senha
+          </h3>
+          <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-700">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="text-xs text-slate-500">
+          Nova senha para <strong className="text-slate-700">{user.nome}</strong>.
+        </p>
+        <input
+          type="password"
+          className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
+          value={novaSenha}
+          onChange={(e) => setNovaSenha(e.target.value)}
+          placeholder="Mínimo 3 caracteres"
+          autoFocus
+        />
+        {erro && (
+          <p className="flex items-center gap-2 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {erro}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-bold">
+            Cancelar
+          </button>
+          <button
+            onClick={salvar}
+            disabled={salvando}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-[#0b132b] text-white hover:bg-[#1b2a47] text-sm font-bold shadow-md disabled:opacity-60"
+          >
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4 text-[#38bdf8]" />}
+            {salvando ? 'Salvando...' : 'Redefinir'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

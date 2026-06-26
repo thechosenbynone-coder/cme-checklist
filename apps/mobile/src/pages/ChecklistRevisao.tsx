@@ -30,12 +30,16 @@ const STATUS_CFG: Record<StatusItem, { icon: React.ElementType; label: string; c
   NAO_APLICAVEL: { icon: HelpCircle, label: 'N/A', cls: 'bg-slate-500/10 border-slate-500/30 text-slate-600 dark:text-muted' },
 };
 
-const isVideo = (url: string) =>
+// Fallback legado: dados antigos gravavam vídeo dentro de fotosUrls.
+const isLegacyVideo = (url: string) =>
   url.includes('video-') || url.endsWith('.webm') || url.startsWith('data:video/');
 
-const Evidencia: React.FC<{ url: string; alt: string }> = ({ url, alt }) => {
+// `tipo='video'` força <video> (campos dedicados videoUrl). Sem tipo, usa o
+// fallback legado para dados antigos misturados em fotosUrls.
+const Evidencia: React.FC<{ url: string; alt: string; tipo?: 'foto' | 'video' }> = ({ url, alt, tipo }) => {
   const src = api.mediaUrl(url);
-  return isVideo(url) ? (
+  const ehVideo = tipo === 'video' || (tipo === undefined && isLegacyVideo(url));
+  return ehVideo ? (
     <video src={src} controls className="h-28 w-44 object-cover rounded-lg border border-border shadow-sm" />
   ) : (
     <img src={src} alt={alt} className="h-28 w-44 object-cover rounded-lg border border-border shadow-sm" />
@@ -269,12 +273,18 @@ export const ChecklistRevisao: React.FC = () => {
                                     {r.pendenciaResolvida ? 'Resolvida' : 'Não resolvida'}
                                   </span>
                                 </p>
-                                {r.fotoResolvidaUrl && <Evidencia url={r.fotoResolvidaUrl} alt="Evidência da pendência" />}
+                                <div className="flex flex-wrap gap-2">
+                                  {r.fotoResolvidaUrl && <Evidencia url={r.fotoResolvidaUrl} alt="Evidência da pendência (foto)" tipo="foto" />}
+                                  {r.videoUrl && <Evidencia url={r.videoUrl} alt="Evidência da pendência (vídeo)" tipo="video" />}
+                                </div>
                               </div>
                             )}
 
-                            {/* Foto do item */}
-                            {r.fotoUrl && <Evidencia url={r.fotoUrl} alt="Foto do item" />}
+                            {/* Foto e evidências do item */}
+                            {r.fotoUrl && <Evidencia url={r.fotoUrl} alt="Foto do item" tipo="foto" />}
+                            {r.videoUrl && r.pendenciaResolvida === undefined && (
+                              <Evidencia url={r.videoUrl} alt="Vídeo do item" tipo="video" />
+                            )}
                           </div>
                         </Card>
                       );
@@ -305,21 +315,24 @@ export const ChecklistRevisao: React.FC = () => {
                 </div>
               )}
 
-              {/* Fotos do equipamento */}
-              {inspecao.fotosUrls && inspecao.fotosUrls.length > 0 && (
+              {/* Fotos e vídeo do equipamento */}
+              {((inspecao.fotosUrls && inspecao.fotosUrls.length > 0) || inspecao.videoUrl) && (
                 <div className="space-y-2.5">
                   <h3 className="text-[10px] font-extrabold text-primary uppercase tracking-wider px-1 flex items-center gap-1.5">
-                    <Camera className="h-3.5 w-3.5" /> Fotos do Equipamento
+                    <Camera className="h-3.5 w-3.5" /> Fotos e Vídeo do Equipamento
                   </h3>
                   <div className="grid grid-cols-3 gap-2">
-                    {inspecao.fotosUrls.map((url, i) => (
-                      isVideo(url) ? (
+                    {(inspecao.fotosUrls || []).map((url, i) => (
+                      isLegacyVideo(url) ? (
                         <video key={i} src={api.mediaUrl(url)} controls className="aspect-square object-cover rounded-lg border border-border" />
                       ) : (
                         <img key={i} src={api.mediaUrl(url)} alt={`Evidência ${i + 1}`} className="aspect-square object-cover rounded-lg border border-border" />
                       )
                     ))}
                   </div>
+                  {inspecao.videoUrl && (
+                    <video src={api.mediaUrl(inspecao.videoUrl)} controls className="w-full rounded-lg border border-border mt-2" />
+                  )}
                 </div>
               )}
 

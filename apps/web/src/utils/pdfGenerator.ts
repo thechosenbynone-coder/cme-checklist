@@ -298,8 +298,9 @@ export const generateInspectionPDF = async (inspecao: Inspecao): Promise<void> =
   // 7. Anexo Fotográfico: Fotos do Equipamento e Resoluções de Pendências
   const fotosEquipamento = inspecao.fotosUrls || inspecao.fotosEquipamento || [];
   const fotosResolvidas = inspecao.respostas.filter(r => r.status === 'PENDENTE' && r.pendenciaResolvida && (r.fotoResolvidaUrl || r.fotoResolvidaBase64));
-  
-  if (fotosEquipamento.length > 0 || fotosResolvidas.length > 0) {
+  const videoEquipamento = inspecao.videoUrl;
+
+  if (fotosEquipamento.length > 0 || fotosResolvidas.length > 0 || videoEquipamento) {
     doc.addPage();
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
@@ -333,7 +334,19 @@ export const generateInspectionPDF = async (inspecao: Inspecao): Promise<void> =
       }
       photoY += 48;
     }
-    
+
+    // 7a-bis. Vídeo do Equipamento (campo dedicado — PDF não embute vídeo)
+    if (videoEquipamento) {
+      if (photoY > 250) {
+        doc.addPage();
+        photoY = 20;
+      }
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8);
+      doc.text(`[Vídeo do equipamento registrado em campo: ${videoEquipamento}]`, 10, photoY);
+      photoY += 10;
+    }
+
     // 7b. Fotos de Resoluções de Pendências
     if (fotosResolvidas.length > 0) {
       if (photoY > 220) {

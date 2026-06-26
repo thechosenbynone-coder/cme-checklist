@@ -67,11 +67,15 @@ publicRouter.post('/auth/login', loginLimiter, async (req, res) => {
     }
     const { identifier, senha } = parsed.data;
 
-    // Login por e-mail OU nome (case-insensitive).
+    // Login por CPF, e-mail ou nome (case-insensitive).
+    const cpfNormalizado = identifier.replace(/\D/g, '');
+    const isCpf = /^\d{11}$/.test(cpfNormalizado);
+
     const user = await prisma.user.findFirst({
       where: {
         ativo: true,
         OR: [
+          ...(isCpf ? [{ cpf: cpfNormalizado }] : []),
           { email: { equals: identifier, mode: 'insensitive' } },
           { nome: { equals: identifier, mode: 'insensitive' } },
         ],
@@ -92,7 +96,7 @@ publicRouter.post('/auth/login', loginLimiter, async (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, nome: user.nome, email: user.email, funcao: user.funcao },
+      user: { id: user.id, nome: user.nome, cpf: user.cpf, email: user.email, funcao: user.funcao },
     });
   } catch (error: any) {
     console.error('Error during login:', error);

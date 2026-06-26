@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileSpreadsheet, FileText, CheckCircle2, User, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, FileSpreadsheet, FileText, CheckCircle2, User, AlertTriangle, ShieldCheck, XCircle, X } from 'lucide-react';
 import { Card, Badge, Button } from '@cme/ui';
-import api from '../services/api';
-import { Inspecao } from '@cme/types';
+import api, { ApiError } from '../services/api';
+import { Inspecao, IntegridadeReport } from '@cme/types';
 import { generateInspectionPDF } from '../utils/pdfGenerator';
 import { exportSingleInspectionToExcel } from '../utils/excelExporter';
+
+const SUCCESS_DISMISS_MS = 4000;
 
 export const InspecaoDetalhes: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -13,11 +15,25 @@ export const InspecaoDetalhes: React.FC = () => {
   const [inspecao, setInspecao] = useState<Inspecao | null>(null);
   const [userRole, setUserRole] = useState<string>('Operador');
   const [validando, setValidando] = useState(false);
+  const [integridade, setIntegridade] = useState<IntegridadeReport | null>(null);
+  const [integridadeErro, setIntegridadeErro] = useState<string>('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const carregarIntegridade = (inspId: string) => {
+    setIntegridadeErro('');
+    api.inspecoes
+      .integridade(inspId)
+      .then((rep) => setIntegridade(rep))
+      .catch((e) => setIntegridadeErro(e?.message || 'Erro ao calcular integridade.'));
+  };
 
   useEffect(() => {
     if (id) {
       api.inspecoes.get(id).then(data => {
-        if (data) setInspecao(data);
+        if (data) {
+          setInspecao(data);
+          if (data.status === 'CONCLUIDA') carregarIntegridade(data.id);
+        }
       });
     }
     const user = api.auth.currentUser();
@@ -25,6 +41,14 @@ export const InspecaoDetalhes: React.FC = () => {
       setUserRole(user.funcao);
     }
   }, [id]);
+
+  // Auto-dismiss de sucesso; erros persistem até o usuário fechar.
+  useEffect(() => {
+    if (feedback?.type === 'success') {
+      const t = setTimeout(() => setFeedback(null), SUCCESS_DISMISS_MS);
+      return () => clearTimeout(t);
+    }
+  }, [feedback]);
 
   if (!inspecao) {
     return (
@@ -47,16 +71,28 @@ export const InspecaoDetalhes: React.FC = () => {
   const handleValidate = async () => {
     if (!inspecao) return;
     setValidando(true);
+    setFeedback(null);
     try {
       const updated = await api.inspecoes.validar(inspecao.id);
       setInspecao(updated);
-      alert('Inspeção validada! O equipamento foi liberado. ✅');
+      setIntegridade(null);
+      setFeedback({ type: 'success', text: 'Inspeção validada — equipamento liberado.' });
     } catch (e: any) {
-      alert(e?.message || 'Erro ao validar a inspeção.');
+      // 422: integridade insuficiente. Atualiza o card com o relatório retornado.
+      if (e instanceof ApiError && e.status === 422 && e.data?.integridade) {
+        setIntegridade(e.data.integridade as IntegridadeReport);
+        setFeedback({ type: 'error', text: 'Validação bloqueada: a inspeção não atende aos critérios de integridade. Veja as pendências abaixo.' });
+      } else {
+        setFeedback({ type: 'error', text: e?.message || 'Erro ao validar a inspeção.' });
+      }
     } finally {
       setValidando(false);
     }
   };
+
+  const aprovado = integridade?.aprovado === true;
+  const podeValidar =
+    inspecao?.status !== 'VALIDADA' && ['GESTOR', 'ADMIN'].includes((userRole || '').toUpperCase());
 
   return (
     <div className="space-y-6">
@@ -89,19 +125,46 @@ export const InspecaoDetalhes: React.FC = () => {
             <span>Exportar Excel</span>
           </Button>
 
-          {inspecao.status !== 'VALIDADA' && ['GESTOR', 'ADMIN'].includes((userRole || '').toUpperCase()) && (
-            <Button
-              variant="success"
-              onClick={handleValidate}
-              disabled={validando}
-              className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              <span>{validando ? 'Validando...' : 'Validar e Liberar'}</span>
-            </Button>
+          {podeValidar && (
+            <div className="flex flex-col items-stretch">
+              <Button
+                variant="success"
+                onClick={handleValidate}
+                disabled={validando || (inspecao.status === 'CONCLUIDA' && integridade != null && !aprovado)}
+                className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span>{validando ? 'Validando...' : 'Validar e Liberar'}</span>
+              </Button>
+              {/* Texto estático (tooltip nativo não dispara em touch/tablet) */}
+              {inspecao.status === 'CONCLUIDA' && integridade != null && !aprovado && (
+                <span className="text-[10px] text-red-500 font-semibold mt-1 text-center max-w-[180px]">
+                  Corrija as pendências abaixo para validar
+                </span>
+              )}
+            </div>
           )}
         </div>
       </div>
+
+      {/* Banner de feedback (validação) */}
+      {feedback && (
+        <div
+          className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl text-sm font-semibold ${
+            feedback.type === 'success'
+              ? 'bg-green-50 border border-green-200 text-green-700'
+              : 'bg-red-50 border border-red-200 text-red-700'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            {feedback.type === 'success' ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
+            {feedback.text}
+          </span>
+          <button onClick={() => setFeedback(null)} className="opacity-60 hover:opacity-100">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Overview Card */}
       <Card 
@@ -215,6 +278,35 @@ export const InspecaoDetalhes: React.FC = () => {
                         </div>
                       )}
 
+                      {/* Evidências do item (fotos legadas em fotosUrls + vídeo dedicado) */}
+                      {((resp.fotosUrls && resp.fotosUrls.length > 0) || resp.videoUrl) && (
+                        <div className="mt-2.5">
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Evidências</span>
+                          <div className="flex flex-wrap gap-2">
+                            {(resp.fotosUrls || []).map((ev, i) => {
+                              const isLegacyVideo = ev.includes('video-') || ev.endsWith('.webm') || ev.startsWith('data:video/');
+                              return isLegacyVideo ? (
+                                <video key={i} src={api.mediaUrl(ev)} controls className="h-20 w-32 object-cover rounded-lg border border-slate-200 shadow-sm" />
+                              ) : (
+                                <img
+                                  key={i}
+                                  src={api.mediaUrl(ev)}
+                                  alt={`Evidência ${i + 1}`}
+                                  className="h-20 w-32 object-cover rounded-lg border border-slate-200 shadow-sm cursor-zoom-in hover:opacity-90 transition"
+                                  onClick={() => {
+                                    const newTab = window.open();
+                                    if (newTab) newTab.document.write(`<img src="${api.mediaUrl(ev)}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                                  }}
+                                />
+                              );
+                            })}
+                            {resp.videoUrl && (
+                              <video src={api.mediaUrl(resp.videoUrl)} controls className="h-20 w-32 object-cover rounded-lg border border-slate-200 shadow-sm" />
+                            )}
+                          </div>
+                        </div>
+                      )}
+
 
                       {(resp.observacao || (resp.responsavel && resp.responsavel.trim())) && (
                         <div className="flex flex-wrap gap-2 mt-1.5">
@@ -287,16 +379,24 @@ export const InspecaoDetalhes: React.FC = () => {
 
         {/* Right Column: Consumed Materials & Digital Signature */}
         <div className="space-y-6">
-          
-          {/* Fotos do Equipamento */}
-          {((inspecao.fotosUrls && inspecao.fotosUrls.length > 0) || (inspecao.fotosEquipamento && inspecao.fotosEquipamento.length > 0)) && (
-            <Card title="Fotos do Equipamento">
+
+          {/* Integridade da Inspeção (somente quando concluída, aguardando validação) */}
+          {inspecao.status === 'CONCLUIDA' && (
+            <IntegridadeCard integridade={integridade} erro={integridadeErro} onRetry={() => carregarIntegridade(inspecao.id)} />
+          )}
+
+          {/* Fotos e Vídeo do Equipamento */}
+          {((inspecao.fotosUrls && inspecao.fotosUrls.length > 0) || (inspecao.fotosEquipamento && inspecao.fotosEquipamento.length > 0) || inspecao.videoUrl) && (
+            <Card title="Fotos e Vídeo do Equipamento">
               <div className="grid grid-cols-3 gap-2">
                 {(inspecao.fotosUrls || inspecao.fotosEquipamento || []).map((foto, idx) => {
-                  const isVideo = foto.includes('video-') || foto.endsWith('.webm') || foto.startsWith('data:video/');
+                  // Heurística mantida apenas como fallback para dados legados
+                  // (vídeos antigos gravados dentro de fotosUrls). Uploads novos
+                  // separam vídeo em inspecao.videoUrl.
+                  const isLegacyVideo = foto.includes('video-') || foto.endsWith('.webm') || foto.startsWith('data:video/');
                   return (
                     <div key={idx} className="aspect-square rounded-lg border border-slate-200 overflow-hidden bg-slate-50 relative group">
-                      {isVideo ? (
+                      {isLegacyVideo ? (
                         <video
                           src={api.mediaUrl(foto)}
                           controls
@@ -319,6 +419,16 @@ export const InspecaoDetalhes: React.FC = () => {
                   );
                 })}
               </div>
+              {inspecao.videoUrl && (
+                <div className="mt-3">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Vídeo do Equipamento</span>
+                  <video
+                    src={api.mediaUrl(inspecao.videoUrl)}
+                    controls
+                    className="w-full rounded-lg border border-slate-200 shadow-sm"
+                  />
+                </div>
+              )}
             </Card>
           )}
 
@@ -371,6 +481,128 @@ export const InspecaoDetalhes: React.FC = () => {
 
       </div>
     </div>
+  );
+};
+
+// Card de integridade: completude, pendências, evidências e gate de validação.
+const IntegridadeCard: React.FC<{
+  integridade: IntegridadeReport | null;
+  erro: string;
+  onRetry: () => void;
+}> = ({ integridade, erro, onRetry }) => {
+  if (erro) {
+    return (
+      <Card title="Integridade da Inspeção">
+        <div className="text-center py-4 space-y-2">
+          <p className="text-xs text-red-500 font-semibold">{erro}</p>
+          <button onClick={onRetry} className="text-xs font-bold text-[#0b132b] underline">
+            Tentar novamente
+          </button>
+        </div>
+      </Card>
+    );
+  }
+  if (!integridade) {
+    return (
+      <Card title="Integridade da Inspeção">
+        <div className="animate-pulse space-y-2 py-2">
+          <div className="h-3 bg-slate-100 rounded w-3/4" />
+          <div className="h-2 bg-slate-100 rounded w-1/2" />
+          <div className="h-2 bg-slate-100 rounded w-2/3" />
+        </div>
+      </Card>
+    );
+  }
+
+  const { completude, aprovado, itensRespondidos, totalItens } = integridade;
+  const barColor = completude >= 100 ? 'bg-green-500' : completude >= 80 ? 'bg-amber-500' : 'bg-red-500';
+
+  const StatusLinha: React.FC<{ ok: boolean; label: string }> = ({ ok, label }) => (
+    <div className="flex items-center gap-2 text-xs font-semibold">
+      {ok ? <ShieldCheck className="h-3.5 w-3.5 text-green-600" /> : <XCircle className="h-3.5 w-3.5 text-red-500" />}
+      <span className={ok ? 'text-slate-600' : 'text-red-600'}>{label}</span>
+    </div>
+  );
+
+  return (
+    <Card title="Integridade da Inspeção">
+      <div className="space-y-3">
+        {aprovado ? (
+          <div className="flex items-center gap-2 text-xs font-bold text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+            <ShieldCheck className="h-4 w-4" /> Pronto para validar
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+            <AlertTriangle className="h-4 w-4" /> Pendências bloqueiam a validação
+          </div>
+        )}
+
+        {/* Barra de completude */}
+        <div>
+          <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+            <span>Completude</span>
+            <span>{itensRespondidos}/{totalItens} itens · {completude}%</span>
+          </div>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div className={`h-full ${barColor} transition-all`} style={{ width: `${completude}%` }} />
+          </div>
+        </div>
+
+        {/* Status gerais */}
+        <div className="space-y-1.5">
+          <StatusLinha ok={integridade.temAssinatura} label={integridade.temAssinatura ? 'Assinatura registrada' : 'Assinatura ausente'} />
+          <StatusLinha ok={integridade.temFotosOuVideoEquipamento} label={integridade.temFotosOuVideoEquipamento ? 'Fotos/vídeo do equipamento' : 'Sem foto/vídeo do equipamento'} />
+        </div>
+
+        {/* Itens obrigatórios pendentes */}
+        {integridade.itensObrigatoriosPendentes.length > 0 && (
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold text-red-400 uppercase tracking-wider">
+              Itens obrigatórios pendentes ({integridade.itensObrigatoriosPendentes.length})
+            </span>
+            <ul className="space-y-1 max-h-40 overflow-y-auto pr-1">
+              {integridade.itensObrigatoriosPendentes.map((it) => (
+                <li key={it.itemId} className="text-[11px] text-red-600 bg-red-50/60 border border-red-100 rounded-lg px-2 py-1">
+                  <span className="font-bold">{it.secao}:</span> {it.descricao}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Evidências faltantes */}
+        {integridade.evidenciasFaltantes.length > 0 && (
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold text-amber-500 uppercase tracking-wider">
+              Evidências faltantes ({integridade.evidenciasFaltantes.length})
+            </span>
+            <ul className="space-y-1 max-h-32 overflow-y-auto pr-1">
+              {integridade.evidenciasFaltantes.map((ev) => (
+                <li key={ev.itemId} className="text-[11px] text-amber-700 bg-amber-50/60 border border-amber-100 rounded-lg px-2 py-1">
+                  {ev.descricao} — <span className="italic">{ev.motivo}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Certificados vencidos */}
+        {integridade.certificadosVencidos.length > 0 && (
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold text-red-400 uppercase tracking-wider">
+              Certificados vencidos ({integridade.certificadosVencidos.length})
+            </span>
+            <ul className="space-y-1">
+              {integridade.certificadosVencidos.map((c) => (
+                <li key={c.itemId} className="text-[11px] text-red-600 bg-red-50/60 border border-red-100 rounded-lg px-2 py-1">
+                  {c.descricao}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 };
 

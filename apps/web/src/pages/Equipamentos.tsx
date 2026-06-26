@@ -245,7 +245,7 @@ const DetalheEquipamento: React.FC<{
   onClose: () => void;
   onGerarChecklist: () => void;
 }> = ({ detalhe, loading, onClose, onGerarChecklist }) => {
-  const [lightboxMedia, setLightboxMedia] = useState<{ url: string; type: 'photo' | 'signature'; source: string } | null>(null);
+  const [lightboxMedia, setLightboxMedia] = useState<{ url: string; type: 'photo' | 'signature' | 'video'; source: string } | null>(null);
 
   if (loading || !detalhe) {
     return (
@@ -258,42 +258,67 @@ const DetalheEquipamento: React.FC<{
   const dados = (detalhe.dadosPlanilha || {}) as Record<string, unknown>;
 
   const mediaList = useMemo(() => {
-    const urls: { url: string; type: 'photo' | 'signature'; source: string }[] = [];
-    
+    const urls: { url: string; type: 'photo' | 'signature' | 'video'; source: string }[] = [];
+    // Detecção legada de vídeo (dados antigos gravados dentro de fotosUrls).
+    const isLegacyVideo = (u: string) =>
+      u.includes('video-') || u.toLowerCase().endsWith('.webm') || u.startsWith('data:video/');
+
     inspecoes.forEach((insp) => {
       // Signature
       if (insp.assinaturaUrl) {
-        urls.push({ 
-          url: insp.assinaturaUrl, 
-          type: 'signature', 
-          source: `Assinatura de ${insp.responsavelGeral || 'Inspetor'} em ${new Date(insp.data).toLocaleDateString('pt-BR')}` 
+        urls.push({
+          url: insp.assinaturaUrl,
+          type: 'signature',
+          source: `Assinatura de ${insp.responsavelGeral || 'Inspetor'} em ${new Date(insp.data).toLocaleDateString('pt-BR')}`
         });
       }
       // General inspection photos
       if (insp.fotosUrls && insp.fotosUrls.length > 0) {
         insp.fotosUrls.forEach((url, idx) => {
-          urls.push({ 
-            url, 
-            type: 'photo', 
-            source: `Foto Geral #${idx + 1} - ${insp.numeroDocumento || 'Sem Doc'}` 
+          urls.push({
+            url,
+            type: isLegacyVideo(url) ? 'video' : 'photo',
+            source: `Foto Geral #${idx + 1} - ${insp.numeroDocumento || 'Sem Doc'}`
           });
         });
       }
-      // Item response photos
+      // General inspection video (campo dedicado)
+      if (insp.videoUrl) {
+        urls.push({
+          url: insp.videoUrl,
+          type: 'video',
+          source: `Vídeo do Equipamento - ${insp.numeroDocumento || 'Sem Doc'}`,
+        });
+      }
+      // Item response photos & video
       if (insp.respostas && insp.respostas.length > 0) {
         insp.respostas.forEach((resp) => {
           if (resp.fotoUrl) {
-            urls.push({ 
-              url: resp.fotoUrl, 
-              type: 'photo', 
-              source: `Evidência de Falha: ${resp.item?.descricao || 'Item'} - ${insp.numeroDocumento || 'Sem Doc'}` 
+            urls.push({
+              url: resp.fotoUrl,
+              type: 'photo',
+              source: `Evidência de Falha: ${resp.item?.descricao || 'Item'} - ${insp.numeroDocumento || 'Sem Doc'}`
+            });
+          }
+          (resp.fotosUrls || []).forEach((url, i) => {
+            urls.push({
+              url,
+              type: isLegacyVideo(url) ? 'video' : 'photo',
+              source: `Evidência #${i + 1}: ${resp.item?.descricao || 'Item'} - ${insp.numeroDocumento || 'Sem Doc'}`,
+            });
+          });
+          if (resp.videoUrl) {
+            urls.push({
+              url: resp.videoUrl,
+              type: 'video',
+              source: `Vídeo: ${resp.item?.descricao || 'Item'} - ${insp.numeroDocumento || 'Sem Doc'}`,
             });
           }
           if (resp.fotoResolvidaUrl) {
-            urls.push({ 
-              url: resp.fotoResolvidaUrl, 
-              type: 'photo', 
-              source: `Evidência de Resolução: ${resp.item?.descricao || 'Item'} - ${insp.numeroDocumento || 'Sem Doc'}` 
+            urls.push({
+              url: resp.fotoResolvidaUrl,
+              type: isLegacyVideo(resp.fotoResolvidaUrl) ? 'video' : 'photo',
+              source: `Evidência de Resolução: ${resp.item?.descricao || 'Item'} - ${insp.numeroDocumento || 'Sem Doc'}`
             });
           }
         });
@@ -367,7 +392,7 @@ const DetalheEquipamento: React.FC<{
         ) : (
           <div className="grid grid-cols-3 gap-2">
             {mediaList.map((media, idx) => {
-              const isVideo = media.url.toLowerCase().endsWith('.webm') || media.url.startsWith('data:video/');
+              const isVideo = media.type === 'video';
               return (
                 <button
                   key={idx}
@@ -456,7 +481,7 @@ const DetalheEquipamento: React.FC<{
             <X className="h-6 w-6" />
           </button>
           <div className="max-w-2xl w-full max-h-[80vh] flex items-center justify-center p-2" onClick={(e) => e.stopPropagation()}>
-            {lightboxMedia.url.toLowerCase().endsWith('.webm') || lightboxMedia.url.startsWith('data:video/') ? (
+            {lightboxMedia.type === 'video' ? (
               <video src={api.mediaUrl(lightboxMedia.url)} controls autoPlay className="max-w-full max-h-[75vh] rounded-xl shadow-2xl" />
             ) : (
               <img src={api.mediaUrl(lightboxMedia.url)} alt={lightboxMedia.source} className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl" />
