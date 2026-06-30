@@ -7,10 +7,11 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "start": "npm run prisma:deploy && node dist/src/server.js",
+    "start": "npm run db:sync && node dist/src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "db:sync": "prisma db push --skip-generate",
     "prisma:studio": "prisma studio",
     "import:equipamentos": "tsx src/scripts/importEquipamentos.ts",
     "import:equipamentos:dry": "tsx src/scripts/importEquipamentos.ts --dry-run"
