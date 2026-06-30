@@ -4,6 +4,8 @@
 
 O main agent (orquestrador) delega tarefas para sub-agents especializados por função. O usuário fala apenas com o main, que distribui o trabalho, consolida resultados e reporta.
 
+Qualquer papel cujo prompt mande invocar uma skill via Skill tool precisa: (1) ter `Skill` na própria lista de Ferramentas, e (2) a skill referenciada precisa estar versionada em `.claude/skills/<nome>/SKILL.md` neste repositório — não basta existir numa biblioteca local fora do checkout, ou um clone limpo/CI não vai encontrá-la.
+
 ---
 
 ## Filosofia Base (Ponytail — Lazy Senior Dev)
@@ -56,7 +58,7 @@ Se QUALQUER gate não foi atingido, liste o que falta no campo "Pendências".
 ### QA-Plan (Planejamento de testes)
 - **Modelo:** haiku
 - **Escopo:** Analisar código e definir plano de testes (casos, edge cases, cenários)
-- **Ferramentas:** Read, Grep, Glob
+- **Ferramentas:** Read, Grep, Glob, Skill
 - **Modo:** Leitura (paralelo)
 
 **Prompt de qualidade (injetado):**
@@ -144,7 +146,7 @@ Vereditos possíveis:
 ### UI/UX Specialist (Revisão de Interface) — NOVO
 - **Modelo:** opus
 - **Escopo:** Revisar diffs que tocam `apps/web/` ou `apps/mobile/` quanto a polish visual, animação/motion e padrões de UI. Só roda quando o diff inclui arquivos de UI — pular em mudanças puramente de backend/infra.
-- **Ferramentas:** Read, Grep, Glob
+- **Ferramentas:** Read, Grep, Glob, Skill
 - **Modo:** Leitura (paralelo, junto com Reviewer e QA-Plan)
 
 **Prompt de qualidade (injetado):**
