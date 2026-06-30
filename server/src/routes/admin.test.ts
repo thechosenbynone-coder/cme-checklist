@@ -172,11 +172,19 @@ describe.skipIf(!HAS_DB)('POST /api/users (create)', () => {
 
 describe.skipIf(!HAS_DB)('PATCH /api/users/:id (update)', () => {
   it('9. Deactivate last ADMIN → 409', async () => {
-    // First, ensure only 1 ADMIN by checking. Our seed has ADMIN_ID + "Segundo Admin" from test 3.
-    // Remove the second admin first to make ADMIN_ID the last.
+    // Ensure ADMIN_ID is the only active ADMIN: demote "Segundo Admin" from test 3,
+    // and any other admin already in the database (e.g. the seeded "usr-lucas"),
+    // so this assertion doesn't depend on what the seed happens to contain.
     const secondAdminId = CREATED_IDS[2]; // "Segundo Admin" from test 3
     if (secondAdminId) {
       await prisma.user.update({ where: { id: secondAdminId }, data: { funcao: 'OPERADOR' } });
+    }
+    const otherAdmins = await prisma.user.findMany({
+      where: { funcao: 'ADMIN', ativo: true, id: { not: ADMIN_ID } },
+    });
+    const otherAdminIds = otherAdmins.map(a => a.id);
+    if (otherAdminIds.length > 0) {
+      await prisma.user.updateMany({ where: { id: { in: otherAdminIds } }, data: { funcao: 'OPERADOR' } });
     }
 
     const res = await authFetch(`${getBase()}/api/users/${ADMIN_ID}`, adminToken, {
@@ -187,9 +195,12 @@ describe.skipIf(!HAS_DB)('PATCH /api/users/:id (update)', () => {
     const body = await res.json();
     expect(body.error).toContain('último');
 
-    // Restore second admin
+    // Restore second admin and any other admin demoted above
     if (secondAdminId) {
       await prisma.user.update({ where: { id: secondAdminId }, data: { funcao: 'ADMIN' } });
+    }
+    if (otherAdminIds.length > 0) {
+      await prisma.user.updateMany({ where: { id: { in: otherAdminIds } }, data: { funcao: 'ADMIN' } });
     }
   });
 });
