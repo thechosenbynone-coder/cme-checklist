@@ -20,6 +20,17 @@ publicRouter.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'cme-checklist-api' });
 });
 
+// GET /ready — força o boot completo da cadeia API -> Prisma -> Postgres
+// (diferente do /health, que só confirma que o processo Node está de pé).
+publicRouter.get('/ready', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ready' });
+  } catch (error) {
+    res.status(503).json({ status: 'not_ready' });
+  }
+});
+
 // GET /api/update/check — check for OTA updates (pública, registrada antes do gate de auth)
 publicRouter.get('/api/update/check', async (req, res) => {
   try {

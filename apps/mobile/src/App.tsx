@@ -7,7 +7,9 @@ import Hub from './pages/Hub';
 import EquipamentoSelecao from './pages/EquipamentoSelecao';
 import ChecklistPreenchimento from './pages/ChecklistPreenchimento';
 import ChecklistRevisao from './pages/ChecklistRevisao';
+import { SplashScreen } from './components/ui/SplashScreen';
 import api, { getBaseUrl } from './services/api';
+import { warmupBackend } from './services/warmup';
 
 const BUNDLE_VERSION = '1.0.0';
 
@@ -20,6 +22,16 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 export const App: React.FC = () => {
   const [updating, setUpdating] = useState(false);
+  // Splash fica de pé só o tempo de disparar o warmup e ler a sessão local —
+  // nunca espera a rede. Login/Hub assumem a partir daí (Hub já é cache-first).
+  const [booting, setBooting] = useState(true);
+
+  useEffect(() => {
+    // Dispara o quanto antes, independente de o usuário cair no Login ou
+    // direto no Hub (autenticado pula o Login e nunca veria o prewarm de lá).
+    warmupBackend();
+    setBooting(false);
+  }, []);
 
   useEffect(() => {
     const checkUpdates = async () => {
@@ -49,6 +61,10 @@ export const App: React.FC = () => {
 
     checkUpdates();
   }, []);
+
+  if (booting) {
+    return <SplashScreen />;
+  }
 
   if (updating) {
     return (

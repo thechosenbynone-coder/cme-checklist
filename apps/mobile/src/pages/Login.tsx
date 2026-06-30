@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Loader2 } from 'lucide-react';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
-import api, { getBaseUrl } from '../services/api';
+import { SlowRequestHint, useSlowRequestHint } from '../components/ui/SlowRequestHint';
+import api from '../services/api';
+import { warmupBackend } from '../services/warmup';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -10,16 +12,13 @@ export const Login: React.FC = () => {
   const [senha, setSenha] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const showSlowHint = useSlowRequestHint(loading);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && !window.sessionStorage.getItem('cme_prewarmed')) {
-      window.sessionStorage.setItem('cme_prewarmed', 'true');
-      try {
-        fetch(getBaseUrl() + '/health').catch(() => {});
-      } catch (err) {
-        // fire-and-forget
-      }
-    }
+    // Já costumava ser disparado aqui, mas App.tsx dispara o mesmo warmup
+    // mais cedo (inclusive para quem nem chega a ver o Login). Esta chamada
+    // é idempotente — reaproveita a promise em voo se já houver uma.
+    warmupBackend();
   }, []);
 
 
@@ -112,6 +111,7 @@ export const Login: React.FC = () => {
               'Entrar'
             )}
           </button>
+          <SlowRequestHint show={showSlowHint} />
         </form>
 
       </div>

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, CheckCircle2, AlertTriangle, LogOut, Loader2, ArrowRight, RefreshCw, Clock, User, Trash } from 'lucide-react';
 import { AppHeader } from '../components/ui/AppHeader';
+import { SlowRequestHint, useSlowRequestHint } from '../components/ui/SlowRequestHint';
 import api from '../services/api';
 import { cn } from '../lib/cn';
 
@@ -29,15 +30,48 @@ interface DraftLocal {
   modeloVersao: number;
 }
 
+interface HubCache {
+  draftsList: any[];
+  completedList: any[];
+}
+
+// Cache é escopado por usuário: num aparelho compartilhado, logout/login de
+// outra pessoa não deve mostrar a lista de inspeções de quem usou antes.
+const hubCacheKey = (userId: string) => `cme_hub_cache_${userId}`;
+
+const readHubCache = (userId: string | null): HubCache | null => {
+  if (!userId) return null;
+  try {
+    const raw = localStorage.getItem(hubCacheKey(userId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeHubCache = (userId: string | null, draftsList: any[], completedList: any[]) => {
+  if (!userId) return;
+  try {
+    localStorage.setItem(hubCacheKey(userId), JSON.stringify({ draftsList, completedList }));
+  } catch {
+    /* ignore (quota, etc.) */
+  }
+};
+
 export const Hub: React.FC = () => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [syncing, setSyncing] = useState(false);
 
-  const [draftsList, setDraftsList] = useState<any[]>([]);
-  const [completedList, setCompletedList] = useState<any[]>([]);
+  // Lido uma única vez (lazy init) — a sessão não muda durante a vida do
+  // componente; logout desmonta o Hub e navega pro Login.
+  const [userId] = useState<string | null>(() => api.auth.currentUser()?.id ?? null);
+  const [initialCache] = useState<HubCache | null>(() => readHubCache(userId));
+  const [loading, setLoading] = useState(!initialCache);
+  const [draftsList, setDraftsList] = useState<any[]>(initialCache?.draftsList ?? []);
+  const [completedList, setCompletedList] = useState<any[]>(initialCache?.completedList ?? []);
+  const showSlowHint = useSlowRequestHint(loading);
 
   useEffect(() => {
     const user = api.auth.currentUser();
@@ -46,7 +80,9 @@ export const Hub: React.FC = () => {
       return;
     }
     setCurrentUser(user);
-    loadInspections();
+    // Já temos algo na tela (cache): revalida em segundo plano, sem spinner
+    // cheio. Sem cache (primeiro uso no aparelho): carregamento normal.
+    loadInspections({ silent: !!initialCache });
   }, [navigate]);
 
   // Flush drafts marked as dirty to the server
@@ -124,8 +160,10 @@ export const Hub: React.FC = () => {
     }
   };
 
-  const loadInspections = async () => {
-    setLoading(true);
+  // `silent`: revalida sem mostrar o spinner cheio — usado quando já há dado
+  // (cache ou tela atual) na tela, para não apagar o que o operador já vê.
+  const loadInspections = async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) setLoading(true);
     setError('');
     try {
       // 1. Try to flush any dirty drafts if we are online
@@ -137,10 +175,12 @@ export const Hub: React.FC = () => {
 
       // 2. Load remote inspections
       let remoteInspections: any[] = [];
+      let remoteFetchFailed = false;
       try {
         remoteInspections = await api.inspecoes.getMine();
       } catch (err) {
         console.warn('Could not load remote inspections (offline mode)', err);
+        remoteFetchFailed = true;
       }
 
       // 3. Load local drafts
@@ -241,20 +281,36 @@ export const Hub: React.FC = () => {
       mergedDrafts.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       mergedCompleted.sort((a, b) => new Date(b.updatedAt || b.data).getTime() - new Date(a.updatedAt || a.data).getTime());
 
+      // Busca remota falhou (offline/cold-start): não troca a lista de
+      // concluídos já conhecida por uma vazia — preserva o último estado bom.
+      const safeCompleted = remoteFetchFailed ? completedListRef.current : mergedCompleted;
+
       setDraftsList(mergedDrafts);
-      setCompletedList(mergedCompleted);
+      setCompletedList(safeCompleted);
+      writeHubCache(userId, mergedDrafts, safeCompleted);
     } catch (err: any) {
       console.error(err);
-      setError('Erro ao carregar e mesclar rascunhos.');
+      if (!silent) setError('Erro ao carregar e mesclar rascunhos.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Re-sync listener on focus & online
+  // Refs sempre atualizadas (evitam closures presas no valor inicial do
+  // listener de focus/online, que é registrado só uma vez no mount, e do
+  // fallback de "busca remota falhou" dentro de loadInspections).
+  const hasDataRef = useRef(draftsList.length > 0 || completedList.length > 0);
+  const completedListRef = useRef(completedList);
+  useEffect(() => {
+    hasDataRef.current = draftsList.length > 0 || completedList.length > 0;
+    completedListRef.current = completedList;
+  }, [draftsList, completedList]);
+
+  // Re-sync listener on focus & online: se já há dado na tela (cache ou
+  // carregamento anterior), revalida em segundo plano sem o spinner cheio.
   useEffect(() => {
     const handleEvents = () => {
-      loadInspections();
+      loadInspections({ silent: hasDataRef.current });
     };
 
     window.addEventListener('online', handleEvents);
@@ -267,6 +323,7 @@ export const Hub: React.FC = () => {
 
   const handleLogout = () => {
     if (window.confirm('Deseja realmente sair?')) {
+      if (userId) localStorage.removeItem(hubCacheKey(userId));
       api.auth.logout();
       navigate('/login');
     }
@@ -408,6 +465,7 @@ export const Hub: React.FC = () => {
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-accent" />
             <p className="text-xs text-muted font-semibold uppercase tracking-wider">Carregando Inspeções...</p>
+            <SlowRequestHint show={showSlowHint} />
           </div>
         ) : (
           <div className="space-y-6 max-w-md mx-auto">
