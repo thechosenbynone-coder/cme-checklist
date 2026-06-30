@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, CheckCircle2, AlertTriangle, LogOut, Loader2, ArrowRight, RefreshCw, Clock, User, Trash } from 'lucide-react';
 import { AppHeader } from '../components/ui/AppHeader';
+import { SlowRequestHint, useSlowRequestHint } from '../components/ui/SlowRequestHint';
 import api from '../services/api';
 import { cn } from '../lib/cn';
 
@@ -29,15 +30,41 @@ interface DraftLocal {
   modeloVersao: number;
 }
 
+const HUB_CACHE_KEY = 'cme_hub_cache';
+
+interface HubCache {
+  draftsList: any[];
+  completedList: any[];
+}
+
+const readHubCache = (): HubCache | null => {
+  try {
+    const raw = localStorage.getItem(HUB_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeHubCache = (draftsList: any[], completedList: any[]) => {
+  try {
+    localStorage.setItem(HUB_CACHE_KEY, JSON.stringify({ draftsList, completedList }));
+  } catch {
+    /* ignore (quota, etc.) */
+  }
+};
+
 export const Hub: React.FC = () => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [syncing, setSyncing] = useState(false);
 
-  const [draftsList, setDraftsList] = useState<any[]>([]);
-  const [completedList, setCompletedList] = useState<any[]>([]);
+  const [initialCache] = useState<HubCache | null>(() => readHubCache());
+  const [loading, setLoading] = useState(!initialCache);
+  const [draftsList, setDraftsList] = useState<any[]>(initialCache?.draftsList ?? []);
+  const [completedList, setCompletedList] = useState<any[]>(initialCache?.completedList ?? []);
+  const showSlowHint = useSlowRequestHint(loading);
 
   useEffect(() => {
     const user = api.auth.currentUser();
@@ -46,7 +73,9 @@ export const Hub: React.FC = () => {
       return;
     }
     setCurrentUser(user);
-    loadInspections();
+    // Já temos algo na tela (cache): revalida em segundo plano, sem spinner
+    // cheio. Sem cache (primeiro uso no aparelho): carregamento normal.
+    loadInspections({ silent: !!initialCache });
   }, [navigate]);
 
   // Flush drafts marked as dirty to the server
@@ -124,8 +153,10 @@ export const Hub: React.FC = () => {
     }
   };
 
-  const loadInspections = async () => {
-    setLoading(true);
+  // `silent`: revalida sem mostrar o spinner cheio — usado quando já há dado
+  // (cache ou tela atual) na tela, para não apagar o que o operador já vê.
+  const loadInspections = async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) setLoading(true);
     setError('');
     try {
       // 1. Try to flush any dirty drafts if we are online
@@ -243,18 +274,27 @@ export const Hub: React.FC = () => {
 
       setDraftsList(mergedDrafts);
       setCompletedList(mergedCompleted);
+      writeHubCache(mergedDrafts, mergedCompleted);
     } catch (err: any) {
       console.error(err);
-      setError('Erro ao carregar e mesclar rascunhos.');
+      if (!silent) setError('Erro ao carregar e mesclar rascunhos.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Re-sync listener on focus & online
+  // Ref sempre atualizada (evita closure presa no valor inicial do listener
+  // de focus/online, que é registrado só uma vez no mount).
+  const hasDataRef = useRef(draftsList.length > 0 || completedList.length > 0);
+  useEffect(() => {
+    hasDataRef.current = draftsList.length > 0 || completedList.length > 0;
+  }, [draftsList, completedList]);
+
+  // Re-sync listener on focus & online: se já há dado na tela (cache ou
+  // carregamento anterior), revalida em segundo plano sem o spinner cheio.
   useEffect(() => {
     const handleEvents = () => {
-      loadInspections();
+      loadInspections({ silent: hasDataRef.current });
     };
 
     window.addEventListener('online', handleEvents);
@@ -408,6 +448,7 @@ export const Hub: React.FC = () => {
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-accent" />
             <p className="text-xs text-muted font-semibold uppercase tracking-wider">Carregando Inspeções...</p>
+            <SlowRequestHint show={showSlowHint} />
           </div>
         ) : (
           <div className="space-y-6 max-w-md mx-auto">
