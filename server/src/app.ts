@@ -16,6 +16,10 @@ import { adminRouter } from './routes/admin.routes.js';
 
 const app = express();
 
+// Confiar no header X-Forwarded-For quando atrás de proxy (Render, Vercel, etc).
+// Necessário para o express-rate-limit identificar corretamente o IP do cliente.
+app.set('trust proxy', 1);
+
 // gzip nas respostas — reduz muito o payload (bootstrap/respostas) em rede de campo.
 app.use(compression());
 
