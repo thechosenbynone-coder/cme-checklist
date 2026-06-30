@@ -42,6 +42,8 @@ npx prisma db seed
 
 ### 2. User Setup (if using production database)
 
+✅ **Já aplicado em produção em 2026-06-30** (ver [INCIDENTE_2026-06-30_LOGIN_500.md](INCIDENTE_2026-06-30_LOGIN_500.md)). Mantido aqui como referência para outros ambientes (staging/dev):
+
 ```sql
 -- Promote Lucas to ADMIN (he was created as GESTOR in older seed)
 UPDATE "User" SET funcao='ADMIN' WHERE id='usr-lucas';
@@ -321,6 +323,8 @@ After 24 hours of production deployment, verify:
 ```bash
 DIRECT_URL="..." npx prisma migrate deploy
 ```
+
+**Aconteceu em produção em 2026-06-30** — banco ficou 4 migrations atrasado por ~2 semanas porque o `migrate deploy` manual documentado nunca foi executado. Detalhes completos, erros de processo cometidos na resposta ao incidente, e dívida técnica remanescente: [INCIDENTE_2026-06-30_LOGIN_500.md](INCIDENTE_2026-06-30_LOGIN_500.md).
 
 ### Issue: "último ADMIN cannot be deactivated"
 
