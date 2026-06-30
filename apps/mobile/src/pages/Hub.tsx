@@ -30,25 +30,29 @@ interface DraftLocal {
   modeloVersao: number;
 }
 
-const HUB_CACHE_KEY = 'cme_hub_cache';
-
 interface HubCache {
   draftsList: any[];
   completedList: any[];
 }
 
-const readHubCache = (): HubCache | null => {
+// Cache é escopado por usuário: num aparelho compartilhado, logout/login de
+// outra pessoa não deve mostrar a lista de inspeções de quem usou antes.
+const hubCacheKey = (userId: string) => `cme_hub_cache_${userId}`;
+
+const readHubCache = (userId: string | null): HubCache | null => {
+  if (!userId) return null;
   try {
-    const raw = localStorage.getItem(HUB_CACHE_KEY);
+    const raw = localStorage.getItem(hubCacheKey(userId));
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 };
 
-const writeHubCache = (draftsList: any[], completedList: any[]) => {
+const writeHubCache = (userId: string | null, draftsList: any[], completedList: any[]) => {
+  if (!userId) return;
   try {
-    localStorage.setItem(HUB_CACHE_KEY, JSON.stringify({ draftsList, completedList }));
+    localStorage.setItem(hubCacheKey(userId), JSON.stringify({ draftsList, completedList }));
   } catch {
     /* ignore (quota, etc.) */
   }
@@ -60,7 +64,10 @@ export const Hub: React.FC = () => {
   const [error, setError] = useState('');
   const [syncing, setSyncing] = useState(false);
 
-  const [initialCache] = useState<HubCache | null>(() => readHubCache());
+  // Lido uma única vez (lazy init) — a sessão não muda durante a vida do
+  // componente; logout desmonta o Hub e navega pro Login.
+  const [userId] = useState<string | null>(() => api.auth.currentUser()?.id ?? null);
+  const [initialCache] = useState<HubCache | null>(() => readHubCache(userId));
   const [loading, setLoading] = useState(!initialCache);
   const [draftsList, setDraftsList] = useState<any[]>(initialCache?.draftsList ?? []);
   const [completedList, setCompletedList] = useState<any[]>(initialCache?.completedList ?? []);
@@ -168,10 +175,12 @@ export const Hub: React.FC = () => {
 
       // 2. Load remote inspections
       let remoteInspections: any[] = [];
+      let remoteFetchFailed = false;
       try {
         remoteInspections = await api.inspecoes.getMine();
       } catch (err) {
         console.warn('Could not load remote inspections (offline mode)', err);
+        remoteFetchFailed = true;
       }
 
       // 3. Load local drafts
@@ -272,9 +281,13 @@ export const Hub: React.FC = () => {
       mergedDrafts.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       mergedCompleted.sort((a, b) => new Date(b.updatedAt || b.data).getTime() - new Date(a.updatedAt || a.data).getTime());
 
+      // Busca remota falhou (offline/cold-start): não troca a lista de
+      // concluídos já conhecida por uma vazia — preserva o último estado bom.
+      const safeCompleted = remoteFetchFailed ? completedListRef.current : mergedCompleted;
+
       setDraftsList(mergedDrafts);
-      setCompletedList(mergedCompleted);
-      writeHubCache(mergedDrafts, mergedCompleted);
+      setCompletedList(safeCompleted);
+      writeHubCache(userId, mergedDrafts, safeCompleted);
     } catch (err: any) {
       console.error(err);
       if (!silent) setError('Erro ao carregar e mesclar rascunhos.');
@@ -283,11 +296,14 @@ export const Hub: React.FC = () => {
     }
   };
 
-  // Ref sempre atualizada (evita closure presa no valor inicial do listener
-  // de focus/online, que é registrado só uma vez no mount).
+  // Refs sempre atualizadas (evitam closures presas no valor inicial do
+  // listener de focus/online, que é registrado só uma vez no mount, e do
+  // fallback de "busca remota falhou" dentro de loadInspections).
   const hasDataRef = useRef(draftsList.length > 0 || completedList.length > 0);
+  const completedListRef = useRef(completedList);
   useEffect(() => {
     hasDataRef.current = draftsList.length > 0 || completedList.length > 0;
+    completedListRef.current = completedList;
   }, [draftsList, completedList]);
 
   // Re-sync listener on focus & online: se já há dado na tela (cache ou
@@ -307,6 +323,7 @@ export const Hub: React.FC = () => {
 
   const handleLogout = () => {
     if (window.confirm('Deseja realmente sair?')) {
+      if (userId) localStorage.removeItem(hubCacheKey(userId));
       api.auth.logout();
       navigate('/login');
     }
