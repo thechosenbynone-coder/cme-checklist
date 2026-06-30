@@ -185,7 +185,7 @@ Definições de papéis, regras de orquestração e formatos de entrega em [team
 
 ### Backlog & Próximos Passos
 
-**Status:** Sprint "Pronto para Campo" (PRs #28–#33) mergeado. P0, P1 e P2 do backlog concluídos. CI verde de ponta a ponta (Lint, Tests Node 18.x/20.x, Build).
+**Status:** Sprint "Pronto para Campo" (PRs #28–#33, #35) mergeado. PR #34 (fix de CI) foi fechado sem merge — redundante após #33. Sprint "App Instantâneo" (PR #36, abaixo) mergeado. CI verde de ponta a ponta (Lint, Tests Node 18.x/20.x, Build).
 **Alvo:** Uso em campo (2-4 semanas).
 
 O "bloqueador de build (8 erros de tipo)" nunca foi um bug real de código-fonte: o job de Build do CI nunca tinha executado de fato (dependia do job de Tests, que sempre falhava antes — faltava `DIRECT_URL` e a migration baseline `0_init` é vazia de propósito, incompatível com `migrate deploy` contra um Postgres novo). Sem o job de Build rodar, ninguém percebeu que faltava um passo de `prisma generate` antes do typecheck — sem ele, os tipos gerados pelo Prisma (`Prisma.UserSelect`, `Prisma.PrismaClientKnownRequestError`, etc.) não existem e o `tsc` aponta erros que desaparecem assim que o client é gerado. Corrigido em [PR #33](https://github.com/thechosenbynone-coder/cme-checklist/pull/33) — ver `.github/workflows/test.yml`. Esse mesmo PR também corrigiu um teste (`admin.test.ts`, "Deactivate last ADMIN") que assumia nenhum outro admin ativo além do criado pelo próprio teste, ignorando o `usr-lucas` do seed.
@@ -199,3 +199,45 @@ Restante: os passos manuais de deploy (seção "Deploy" acima) ainda dependem de
 - [Backlog detalhado](BACKLOG.md) — prioridades, esforço, riscos, next steps
 - Memory project: `sprint-campo-deploy.md` — passos manuais de produção
 - Migration Prisma: `server/prisma/migrations/20260626120000_add_cpf_video/migration.sql`
+
+## Sprint "App Instantâneo" (PR #36)
+
+### Contexto
+App mobile demorava muito pra mostrar dado ao abrir. Diagnóstico: não era "visualização no navegador" (APK Capacitor real, bundle local) — era cold-start do backend no plano gratuito do Render, que hiberna após ~15min sem tráfego. Teste direto contra produção: 1ª requisição depois de idle = 32.4s; 2ª (já acordado) = 0.2s.
+
+### Estratégia: esconder o cold-start, não eliminá-lo
+Decisão consciente do usuário: sem keep-alive automático nem upgrade de plano Render por enquanto. Em vez disso, o tempo entre abrir o app e o usuário terminar de logar é aproveitado pra acordar o backend, e quem já está autenticado (pula o Login) ganha abertura instantânea via cache.
+
+#### 1. Warmup global único
+- `GET /ready` (`server/src/routes/public.routes.ts`) roda `prisma.$queryRaw\`SELECT 1\`` — força o boot completo Render → Node → Prisma → Postgres. Diferente do `/health` existente, que só confirma o processo Node de pé (não o banco).
+- `apps/mobile/src/services/warmup.ts`: `warmupBackend()` é uma promise singleton por sessão do app — não importa quantas telas chamem, só dispara uma requisição.
+- Disparado o mais cedo possível em `apps/mobile/src/App.tsx` (junto da splash), antes de qualquer roteamento — cobre tanto quem cai no Login quanto quem vai direto pro Hub (autenticado).
+
+#### 2. Splash screen
+- `apps/mobile/src/components/ui/SplashScreen.tsx`: identidade visual, fica de pé só o tempo de ler sessão local — nunca espera rede. `App.tsx` controla via state `booting`.
+
+#### 3. Hub cache-first (`apps/mobile/src/pages/Hub.tsx`)
+- Última lista conhecida (rascunhos + concluídos) renderiza instantaneamente do `localStorage`, revalida em segundo plano (indicador `syncing`, não spinner cheio).
+- **Cache escopado por usuário** (`cme_hub_cache_${userId}`, não uma chave global) — em aparelho compartilhado, login de outro operador não deve ver a lista do anterior. Também limpo explicitamente no logout.
+- **Revalidação falha preserva o último estado bom:** se `api.inspecoes.getMine()` falhar (offline/cold-start), a lista de concluídos NÃO é sobrescrita por um merge vazio — fica com o valor anterior via `completedListRef` (ref sempre atualizada, necessária porque o listener de `focus`/`online` é registrado uma única vez no mount e ficaria com closure presa em valores stale sem isso).
+- Eventos `focus`/`online` não voltam a mostrar o spinner cheio quando já há dado na tela.
+
+#### 4. Mensagem de espera (fallback)
+- `apps/mobile/src/components/ui/SlowRequestHint.tsx`: hook `useSlowRequestHint(loading)` só revela a mensagem depois de ~4s de espera real (evita flicker em respostas rápidas). Texto não-técnico, sem menção a "Render" ou contagem de segundos. Usado em Login (submit) e Hub (loading sem cache).
+
+#### 5. Paginação opt-in
+- `GET /api/equipamentos?page&limit` (`server/src/routes/equipamentos.routes.ts`) retorna o envelope `PaginatedResponse` só quando os parâmetros são informados — sem eles, mantém o array simples (compatibilidade com Dashboard web e seleção de equipamento mobile, que dependem do array completo pra KPIs calculados no cliente).
+
+### Arquivos Críticos (PR #36)
+
+- `server/src/routes/public.routes.ts` — `/health` (smoke-test) vs `/ready` (boot completo + banco)
+- `apps/mobile/src/services/warmup.ts` — promise singleton de aquecimento
+- `apps/mobile/src/App.tsx` — splash + disparo do warmup
+- `apps/mobile/src/pages/Hub.tsx` — cache-first, escopo por usuário, fallback em falha de revalidação
+- `apps/mobile/src/components/ui/SplashScreen.tsx`, `SlowRequestHint.tsx`
+
+### Lição operacional: limites de infra em preview deployments
+A integração Vercel↔Neon cria um branch de banco Postgres por preview deployment. O plano gratuito do Neon permite só 10 branches simultâneos. Como o repo não apagava branches do git automaticamente após merge, os branches de preview do Neon nunca eram limpos — acumularam até bater o limite e travar o preview do próprio PR #36. Corrigido:
+- **GitHub:** `delete_branch_on_merge` ativado nas configs do repo (Settings → General) — branch do git some sozinho ao mergear, o que deixa a integração Neon limpar o branch do banco correspondente.
+- **Neon:** branches órfãos (ligados a PRs já mergeados/fechados: #28, #29, #31, #32, #33, #34, #35) apagados manualmente via API (`console.neon.tech/api/v2`) — mantidos só `production`, `dev` e `vercel-dev`.
+- Projeto Neon do `cme_checklist`: org `org-withered-brook-27354833`, project id `bitter-grass-55209330` (útil se for preciso depurar branches/uso de novo).
