@@ -173,7 +173,7 @@ model RespostaItem {
   certificadoValidade String?
   pendenciaResolvida  Boolean?
   updatedById String?           // último usuário logado que alterou a resposta
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime @updatedAt @default(now()) // default no banco: backfill de linhas pré-existentes
 
   inspecao Inspecao     @relation(fields: [inspecaoId], references: [id], onDelete: Cascade)
   item     ItemChecklist @relation(fields: [itemId], references: [id])
