@@ -47,7 +47,7 @@ jobs:
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cme_test
         run: |
           cd server
-          npx prisma migrate deploy
+          npx prisma db push --skip-generate
           npx prisma db seed
 
       - name: Run type check
