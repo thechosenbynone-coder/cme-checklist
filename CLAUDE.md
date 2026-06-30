@@ -1,6 +1,6 @@
 # Claude Code Guidelines — CME Checklist
 
-## Sprint "Pronto para Campo" (PR #28)
+## Sprint "Pronto para Campo" (PRs #28–#33)
 
 ### Contexto
 App de checklist ISO 9001 para inspeção de equipamentos. Operadores em campo criam checklists, anexam evidências (fotos/vídeos), recebem feedback de integridade. Gestor/admin valida do dashboard web.
@@ -157,6 +157,7 @@ Depois de merge de PR #28:
 - `apps/web/src/pages/Configuracoes.tsx` — tab Usuários + card integridade
 - `apps/mobile/src/pages/ChecklistPreenchimento.tsx` — preflight + videoUrl
 - `packages/types/src/index.ts` — tipos compartilhados (Funcao, IntegridadeReport, PaginatedResponse)
+- `.github/workflows/test.yml` — CI (Lint, Tests Node 18.x/20.x, Build). Precisa de `DIRECT_URL` além de `DATABASE_URL`, usa `prisma db push` (não `migrate deploy`) para a DB de teste, e gera o Prisma Client explicitamente antes do typecheck do job Build — ver Backlog abaixo para o porquê
 
 ### Testing Hints
 
@@ -180,18 +181,16 @@ Depois de merge de PR #28:
 
 ### Time de Desenvolvimento (Sub-Agents)
 
-Definições de papéis, regras de orquestração e formatos de entrega em [team-agents.md](team-agents.md).
+Definições de papéis, regras de orquestração e formatos de entrega em [team-agents.md](team-agents.md). Inclui o papel "UI/UX Specialist" (opus, leitura/paralelo, só roda em diffs que tocam `apps/web/`/`apps/mobile/`) e QA-Plan/Reviewer reforçados com a skill `error-messages`. As skills que os papéis invocam (`emil-design-eng`, `review-animations`, `frontend-ui-engineering`, `error-messages`) estão versionadas em `.claude/skills/` neste repo — qualquer papel novo que mande invocar uma skill via Skill tool precisa repetir esse padrão (ter `Skill` na lista de Ferramentas + a skill versionada aqui, não só numa biblioteca local fora do checkout).
 
 ### Backlog & Próximos Passos
 
-**Status:** Sprint "Pronto para Campo" (PR #28) mergeado. Código implementado (~95%).  
-**Bloqueador:** TypeScript build com erros de tipo (8 erros em routes). Zero testes de integração.  
+**Status:** Sprint "Pronto para Campo" (PRs #28–#33) mergeado. P0, P1 e P2 do backlog concluídos. CI verde de ponta a ponta (Lint, Tests Node 18.x/20.x, Build).
 **Alvo:** Uso em campo (2-4 semanas).
 
-Backlog detalhado em [BACKLOG.md](BACKLOG.md):
-- **P0 (Blocker):** Corrigir erros de build Prisma (30min)
-- **P1 (Must have):** Implementar 6 suites de teste (12h, rodando em paralelo com team de agents)
-- **P2 (Should have):** Deployment checklist, seed fix, timezone tests, docs (4h)
+O "bloqueador de build (8 erros de tipo)" nunca foi um bug real de código-fonte: o job de Build do CI nunca tinha executado de fato (dependia do job de Tests, que sempre falhava antes — faltava `DIRECT_URL` e a migration baseline `0_init` é vazia de propósito, incompatível com `migrate deploy` contra um Postgres novo). Sem o job de Build rodar, ninguém percebeu que faltava um passo de `prisma generate` antes do typecheck — sem ele, os tipos gerados pelo Prisma (`Prisma.UserSelect`, `Prisma.PrismaClientKnownRequestError`, etc.) não existem e o `tsc` aponta erros que desaparecem assim que o client é gerado. Corrigido em [PR #33](https://github.com/thechosenbynone-coder/cme-checklist/pull/33) — ver `.github/workflows/test.yml`. Esse mesmo PR também corrigiu um teste (`admin.test.ts`, "Deactivate last ADMIN") que assumia nenhum outro admin ativo além do criado pelo próprio teste, ignorando o `usr-lucas` do seed.
+
+Restante: os passos manuais de deploy (seção "Deploy" acima) ainda dependem de execução humana no ambiente com DB real. P2.2 (seed do Lucas) permanece como passo manual documentado, não automatizado — ver [BACKLOG.md](BACKLOG.md) (cujo status geral está desatualizado e merece revisão própria).
 
 ### Links Úteis
 
