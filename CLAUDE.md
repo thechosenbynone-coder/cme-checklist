@@ -135,13 +135,13 @@ interface PaginatedResponse<T> {
 
 ### Deploy (Passos Manuais)
 
-Depois de merge de PR #28:
+✅ **Ambos aplicados em produção em 2026-06-30** — ver [Incidente: Login 500](#incidente-login-500-em-produção-2026-06-30) abaixo. Mantido aqui como runbook de referência (ex.: novo ambiente/staging):
 
-1. **Aplicar migration**
+1. **Aplicar migrations**
    ```bash
    npx prisma migrate deploy
    ```
-   (No ambiente com DB. Migration: `server/prisma/migrations/20260626120000_add_cpf_video`)
+   (No ambiente com DB, usando `DIRECT_URL`. Rode `prisma migrate status` primeiro para confirmar o que está pendente antes de aplicar.)
 
 2. **Promover Lucas a ADMIN**
    ```sql
@@ -190,7 +190,7 @@ Definições de papéis, regras de orquestração e formatos de entrega em [team
 
 O "bloqueador de build (8 erros de tipo)" nunca foi um bug real de código-fonte: o job de Build do CI nunca tinha executado de fato (dependia do job de Tests, que sempre falhava antes — faltava `DIRECT_URL` e a migration baseline `0_init` é vazia de propósito, incompatível com `migrate deploy` contra um Postgres novo). Sem o job de Build rodar, ninguém percebeu que faltava um passo de `prisma generate` antes do typecheck — sem ele, os tipos gerados pelo Prisma (`Prisma.UserSelect`, `Prisma.PrismaClientKnownRequestError`, etc.) não existem e o `tsc` aponta erros que desaparecem assim que o client é gerado. Corrigido em [PR #33](https://github.com/thechosenbynone-coder/cme-checklist/pull/33) — ver `.github/workflows/test.yml`. Esse mesmo PR também corrigiu um teste (`admin.test.ts`, "Deactivate last ADMIN") que assumia nenhum outro admin ativo além do criado pelo próprio teste, ignorando o `usr-lucas` do seed.
 
-Restante: os passos manuais de deploy (seção "Deploy" acima) ainda dependem de execução humana no ambiente com DB real. P2.2 (seed do Lucas) permanece como passo manual documentado, não automatizado — ver [BACKLOG.md](BACKLOG.md) (cujo status geral está desatualizado e merece revisão própria).
+Os passos manuais de deploy (seção "Deploy" acima) foram executados em produção em 2026-06-30 (ver [Incidente: Login 500](#incidente-login-500-em-produção-2026-06-30)). Continuam sem automação — qualquer novo ambiente (staging, banco recriado) precisa repeti-los manualmente. P2.2 (seed do Lucas) permanece como passo manual documentado — ver [BACKLOG.md](BACKLOG.md) (cujo status geral está desatualizado e merece revisão própria).
 
 ### Links Úteis
 
@@ -241,3 +241,22 @@ A integração Vercel↔Neon cria um branch de banco Postgres por preview deploy
 - **GitHub:** `delete_branch_on_merge` ativado nas configs do repo (Settings → General) — branch do git some sozinho ao mergear, o que deixa a integração Neon limpar o branch do banco correspondente.
 - **Neon:** branches órfãos (ligados a PRs já mergeados/fechados: #28, #29, #31, #32, #33, #34, #35) apagados manualmente via API (`console.neon.tech/api/v2`) — mantidos só `production`, `dev` e `vercel-dev`.
 - Projeto Neon do `cme_checklist`: org `org-withered-brook-27354833`, project id `bitter-grass-55209330` (útil se for preciso depurar branches/uso de novo).
+
+## Incidente: Login 500 em produção (2026-06-30)
+
+Relatório completo (cronologia, causas raiz, autocrítica de processo, dívida técnica): [INCIDENTE_2026-06-30_LOGIN_500.md](INCIDENTE_2026-06-30_LOGIN_500.md). Resumo:
+
+### O que aconteceu
+Login retornava 500 porque **o banco de produção (Neon) estava 4 migrations atrasado** (parado desde 19/06) — `prisma migrate deploy` nunca tinha sido executado de fato em produção, apesar de documentado como passo manual pendente desde o sprint "Pronto para Campo". O bug ficou invisível por dias porque o web na Vercel não tinha `VITE_API_BASE_URL` configurada (chamava a própria origem, não o backend) — corrigir essa variável não criou o bug, só revelou a dívida acumulada.
+
+Duas tentativas de hotfix pioraram o quadro antes da correção real: colocar `prisma db push` como dependência do `start` do servidor causou **crash loop** (servidor não subia se o push falhasse). Resolvido aplicando `prisma migrate deploy` (não `db push`) após confirmar via introspecção direta do banco (`prisma db pull --print`) que os alvos estavam ausentes — zero risco de conflito.
+
+### Regras de processo adotadas a partir deste incidente (ver `[[feedback-producao-ground-truth]]` na memória)
+1. **Sincronização de schema nunca acoplada a boot ou build.** `start` é `node dist/src/server.js` puro; `build` é `prisma generate && tsc` (não toca no banco). Sync de produção é sempre passo de deploy **explícito** (`prisma migrate deploy`).
+2. **`prisma db push` não é política de produção** — é ferramenta de dev/recuperação excepcional. Produção usa migrations versionadas.
+3. **Ground-truth antes de decidir, nunca inferência:** confirmar que o checkout/branch usado está sincronizado com `origin/main` antes de rodar `migrate status`; se possível, introspectar o banco real (`prisma db pull --print`) antes de escolher o mecanismo de sync.
+4. **Qualquer mudança em produção/banco/deploy passa pelo ciclo de sub-agents com DevOps-Review obrigatório** (`team-agents.md`) antes do commit, não depois.
+5. Nunca descrever migrations aditivas como "risco zero" — usar linguagem defensável (risco de perda de dado baixo, mas riscos operacionais permanecem) e sempre ter snapshot/PITR do Neon antes de DDL em produção.
+
+### Estado do checkout local
+O checkout principal (`C:\Users\Compras.2\Projetos\cme-checklist`, fora dos worktrees) tinha ~36 commits de atraso e diversos arquivos soltos nunca commitados (CLAUDE.md/.gitignore antigos, um clone Git aninhado redundante, symlinks para uma lib de skills externa). Resolvido em 2026-06-30: sincronizado 100% com `origin/main`; tudo com valor histórico/de dados (specs, planilhas-fonte dos checklists, HANDOFFs de fases antigas, docs do After Cooler) preservado em `C:\Users\Compras.2\Projetos\cme-checklist-backup-residuos\` (fora do repo).
