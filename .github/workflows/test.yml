@@ -44,6 +44,7 @@ jobs:
       - name: Setup test database
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cme_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cme_test
         run: |
           cd server
           npx prisma migrate deploy
@@ -58,6 +59,7 @@ jobs:
       - name: Run all tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cme_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cme_test
         run: npm test
 
       - name: Upload test coverage
