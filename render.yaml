@@ -10,8 +10,12 @@ services:
         value: production
       - key: PORT
         value: 10000
-    # db:sync (prisma db push) sincroniza o schema direto, sem depender do
-    # histórico de migrations (baseline 0_init é vazia). O start também roda
-    # db:sync — este postDeploy é redundante para serviços criados manualmente
-    # (render.yaml só vale para Blueprints).
-    postDeployCommand: npm run db:sync --workspace=server
+    # Schema do banco NÃO é sincronizado no build nem no boot. A aplicação de
+    # migrations em produção é um passo de deploy EXPLÍCITO (prisma migrate deploy),
+    # nunca acoplada a build/start. Se este serviço for recriado como Blueprint,
+    # descomente o preDeployCommand abaixo:
+    # preDeployCommand: npm run prisma:deploy --workspace=server
+    #
+    # ATENÇÃO: o serviço atual foi criado MANUALMENTE no painel do Render, então
+    # este arquivo é apenas documentação — alterá-lo não altera o serviço. Confira
+    # Build/Start/Post-Deploy Command direto no dashboard do Render.

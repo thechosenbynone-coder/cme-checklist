@@ -125,7 +125,7 @@ model Inspecao {
   equipamentoId String
   tipo          TipoInspecao
   data          DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime @updatedAt @default(now()) // default no banco: coluna criada com DEFAULT CURRENT_TIMESTAMP na migration p0_drafts
   numeroDocumento String? @unique // registro único rastreável (ISO 9001)
   modeloId      String?  // versão do template usada (ISO 9001 — rastreabilidade)
   modeloVersao  Int?
@@ -173,7 +173,7 @@ model RespostaItem {
   certificadoValidade String?
   pendenciaResolvida  Boolean?
   updatedById String?           // último usuário logado que alterou a resposta
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime @updatedAt @default(now()) // default no banco: backfill de linhas pré-existentes
 
   inspecao Inspecao     @relation(fields: [inspecaoId], references: [id], onDelete: Cascade)
   item     ItemChecklist @relation(fields: [itemId], references: [id])
