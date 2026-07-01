@@ -69,9 +69,20 @@ model Equipamento {
 
   inspecoes   Inspecao[]
   certificados Certificado[]
+  sequenciaInspecao InspecaoSequencia?
 
   @@index([chaveBusca])
   @@index([tipo])
+}
+
+// Contador sequencial de inspeções POR equipamento — fonte da numeração
+// rastreável OPE-PC-03/{codigo}/{NNN}. Incremento atômico no servidor
+// (ver gerarNumeroDocumento em inspecoes.routes.ts). Uma linha por equipamento,
+// criada sob demanda no primeiro /iniciar daquele equipamento.
+model InspecaoSequencia {
+  equipamentoId String      @id
+  valor         Int         @default(0)
+  equipamento   Equipamento @relation(fields: [equipamentoId], references: [id])
 }
 
 model Certificado {
