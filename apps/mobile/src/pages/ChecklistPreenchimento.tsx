@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '../components/ui/Card';
 import { StatusChip } from '../components/ui/StatusChip';
 import { AppHeader } from '../components/ui/AppHeader';
+import { ImageLightbox } from '../components/ui/ImageLightbox';
 import { cn } from '../lib/cn';
 import api from '../services/api';
 import { Equipamento, ChecklistModelo, Material, StatusItem, maiusculas, IntegridadeReport } from '@cme/types';
@@ -257,6 +258,7 @@ export const ChecklistPreenchimento: React.FC = () => {
   const [recordingVideo, setRecordingVideo] = useState(false);
   const [, setSavingCompleted] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const handleUploadFile = async (file: File | Blob, filename: string): Promise<string> => {
     try {
@@ -1369,14 +1371,21 @@ export const ChecklistPreenchimento: React.FC = () => {
             <div className="flex flex-wrap justify-center gap-2">
               {(resp.fotosUrls || []).map((url, idx) => (
                 <div key={idx} className="relative">
-                  <img
-                    src={api.mediaUrl(url)}
-                    alt={`Evidência ${idx + 1}`}
-                    className="h-16 w-16 object-cover rounded-lg border border-border"
-                  />
                   <button
                     type="button"
-                    onClick={() => handleRemoveFoto(item.id, idx)}
+                    onClick={() => setLightboxUrl(url)}
+                    aria-label={`Ampliar evidência ${idx + 1}`}
+                    className="block rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+                  >
+                    <img
+                      src={api.mediaUrl(url)}
+                      alt={`Evidência ${idx + 1}`}
+                      className="h-16 w-16 object-cover rounded-lg border border-border"
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleRemoveFoto(item.id, idx); }}
                     aria-label="Remover foto"
                     className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-1 shadow"
                   >
@@ -1644,14 +1653,21 @@ export const ChecklistPreenchimento: React.FC = () => {
                             <div className="flex flex-wrap gap-2 w-full">
                               {resp.fotoResolvidaUrl && (
                                 <div className="relative inline-block">
-                                  <img
-                                    src={api.mediaUrl(resp.fotoResolvidaUrl)}
-                                    alt="Reparo resolvido (foto)"
-                                    className="h-24 w-40 object-cover rounded-lg border border-border shadow-sm"
-                                  />
                                   <button
                                     type="button"
-                                    onClick={() => setRespostas(prev => ({ ...prev, [item.id]: { ...prev[item.id], fotoResolvidaUrl: undefined } }))}
+                                    onClick={() => setLightboxUrl(resp.fotoResolvidaUrl!)}
+                                    aria-label="Ampliar foto do reparo"
+                                    className="block rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+                                  >
+                                    <img
+                                      src={api.mediaUrl(resp.fotoResolvidaUrl)}
+                                      alt="Reparo resolvido (foto)"
+                                      className="h-24 w-40 object-cover rounded-lg border border-border shadow-sm"
+                                    />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setRespostas(prev => ({ ...prev, [item.id]: { ...prev[item.id], fotoResolvidaUrl: undefined } })); }}
                                     className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700"
                                   >
                                     <Trash size={12} />
@@ -1754,10 +1770,18 @@ export const ChecklistPreenchimento: React.FC = () => {
                   <span className="text-[9px] font-extrabold text-muted uppercase tracking-widest">{label}</span>
                   {foto ? (
                     <div className="relative w-full aspect-square flex items-center justify-center bg-surface-2 border border-border rounded-lg overflow-hidden">
-                      <img src={api.mediaUrl(foto)} alt={label} className="w-full h-full object-cover" />
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={() => setLightboxUrl(foto)}
+                        aria-label={`Ampliar ${label}`}
+                        className="block w-full h-full focus:outline-none focus:ring-2 focus:ring-accent"
+                      >
+                        <img src={api.mediaUrl(foto)} alt={label} className="w-full h-full object-cover" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setFotosEquipamento(prev => {
                             const updated = [...prev];
                             updated[idx] = undefined;
@@ -2252,6 +2276,13 @@ export const ChecklistPreenchimento: React.FC = () => {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Lightbox: ampliar foto de evidência ao tocar na miniatura */}
+      <AnimatePresence>
+        {lightboxUrl && (
+          <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
         )}
       </AnimatePresence>
     </div>
