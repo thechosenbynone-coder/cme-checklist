@@ -28,6 +28,7 @@ const DRIVE_ERROR_STATUS: Record<DriveErrorCode, number> = {
   NOT_CONFIGURED: 503,
   AUTH_EXPIRED: 503,
   QUOTA_OU_PERMISSAO: 503,
+  FILE_NOT_FOUND: 404,
   UNKNOWN: 502,
 };
 

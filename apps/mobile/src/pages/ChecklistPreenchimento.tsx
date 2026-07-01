@@ -211,7 +211,7 @@ export const ChecklistPreenchimento: React.FC = () => {
   // Loading, Media Uploading and Video Recording State
   const [loading, setLoading] = useState(true);
   const [showLongLoadingMessage, setShowLongLoadingMessage] = useState(false);
-  const [error, setError] = useState('');
+  const [bootstrapError, setBootstrapError] = useState(''); // erro ao carregar checklist
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [, setUploadingFoto] = useState(false);
   const [recordingVideo, setRecordingVideo] = useState(false);
@@ -382,7 +382,7 @@ export const ChecklistPreenchimento: React.FC = () => {
 
     const loadDraftAndBootstrap = async () => {
       setLoading(true);
-      setError('');
+      setBootstrapError('');
 
       let rawDraft = localStorage.getItem(`cme_draft_${id}`);
 
@@ -545,7 +545,7 @@ export const ChecklistPreenchimento: React.FC = () => {
           setDraftLoaded(true);
         } catch (err: any) {
           console.error('Checklist bootstrap failed', err);
-          setError(err.message || 'Erro de conexão com o servidor seguro.');
+          setBootstrapError(err.message || 'Erro de conexão com o servidor seguro.');
           setLoading(false);
         }
       } else {
@@ -572,7 +572,7 @@ export const ChecklistPreenchimento: React.FC = () => {
           setDraftLoaded(true);
         } catch (err: any) {
           console.error('Loading locked checklist failed', err);
-          setError('Erro ao carregar rascunho de checklist iniciado.');
+          setBootstrapError('Erro ao carregar rascunho de checklist iniciado.');
           setLoading(false);
         }
       }
@@ -857,7 +857,6 @@ export const ChecklistPreenchimento: React.FC = () => {
   const handleSaveChecklist = async () => {
     if (!equipamento || !modelo || !id) return;
     setSavingCompleted(true);
-    setError('');
 
     try {
       let assinaturaUrl: string | undefined;
@@ -958,7 +957,7 @@ export const ChecklistPreenchimento: React.FC = () => {
       await finalizarConclusao(basePayload, false);
     } catch (err: any) {
       console.error('Failed to conclude checklist:', err);
-      setError(err.message || 'Falha ao conectar com o servidor. A inspeção foi mantida como rascunho local.');
+      // Não sobrescrever bootstrapError — mostra feedback via banner, não sobrescreve form
       showFeedback('error', 'Erro ao salvar respostas. Verifique a conexão e tente novamente.');
       setSavingCompleted(false);
     }
@@ -1937,14 +1936,14 @@ export const ChecklistPreenchimento: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (bootstrapError) {
     return (
       <div className="h-[100dvh] flex flex-col bg-bg text-content overflow-hidden select-none">
         <AppHeader title="CHECK LIST OPERACIONAL DE LIBERAÇÃO" onBack={handleBackToSelect} />
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
           <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-300 text-xs p-4 rounded-xl flex items-start gap-2 max-w-sm">
             <XCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-            <p>{error}</p>
+            <p>{bootstrapError}</p>
           </div>
           <div className="flex gap-3">
             <button

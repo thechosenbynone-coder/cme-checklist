@@ -141,4 +141,17 @@ describe('GET /api/files/:id', () => {
     const body = await res.json();
     expect(body.code).toBe('AUTH_EXPIRED');
   });
+
+  it('retorna 404 FILE_NOT_FOUND quando o arquivo foi deletado ou não existe', async () => {
+    setDriveEnv();
+    mockFilesGet.mockRejectedValue({
+      response: { status: 404, data: { error: { errors: [{ reason: 'notFound' }] } } },
+    });
+    const res = await fetch(`${getBase()}/api/files/deleted-file-id`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.code).toBe('FILE_NOT_FOUND');
+  });
 });

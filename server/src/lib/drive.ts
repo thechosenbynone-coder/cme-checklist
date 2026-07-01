@@ -9,6 +9,7 @@ export type DriveErrorCode =
   | 'NOT_CONFIGURED'
   | 'AUTH_EXPIRED'
   | 'QUOTA_OU_PERMISSAO'
+  | 'FILE_NOT_FOUND'
   | 'UNKNOWN';
 
 export class DriveError extends Error {
@@ -66,7 +67,8 @@ function getDriveClient() {
 // Classifica o erro por campos estruturados (status HTTP, code, reason da API do
 // Google) em vez de casar texto de mensagem — mensagens podem mudar sem aviso,
 // os campos estruturados abaixo são o contrato estável da API.
-export function classifyDriveError(error: any): DriveError {
+// `operation` permite diferenciar tratamento (ex.: no download, 404 = arquivo deletado).
+export function classifyDriveError(error: any, operation?: 'upload' | 'download'): DriveError {
   if (error instanceof DriveError) return error;
 
   const status: number | undefined = error?.response?.status ?? error?.code;
@@ -79,6 +81,14 @@ export function classifyDriveError(error: any): DriveError {
     return new DriveError(
       'AUTH_EXPIRED',
       'A conexão do servidor com o Google Drive expirou. Contate o suporte técnico.'
+    );
+  }
+
+  // Em download, 404 significa arquivo não encontrado/deletado (não permissão).
+  if (operation === 'download' && (status === 404 || reason === 'notFound')) {
+    return new DriveError(
+      'FILE_NOT_FOUND',
+      'O arquivo de evidência não foi encontrado ou foi deletado.'
     );
   }
 
@@ -159,7 +169,7 @@ export async function downloadFromDrive(fileId: string): Promise<{
     const driveRes = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'stream' });
     return { stream: driveRes.data as any, mimeType: meta.data.mimeType };
   } catch (error: any) {
-    const classified = classifyDriveError(error);
+    const classified = classifyDriveError(error, 'download');
     logDriveError('download', classified, error);
     throw classified;
   }
