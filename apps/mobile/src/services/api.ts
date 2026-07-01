@@ -160,9 +160,10 @@ const api = {
     logout: (): void => clearSession(),
   },
   upload: {
-    file: async (file: File | Blob, filename: string): Promise<string> => {
+    file: async (file: File | Blob, filename: string, inspecaoId: string): Promise<string> => {
       const formData = new FormData();
       formData.append('file', file, filename);
+      formData.append('inspecaoId', inspecaoId);
       const baseUrl = getBaseUrl();
       const token = getToken();
       const response = await fetch(`${baseUrl}/api/upload`, {

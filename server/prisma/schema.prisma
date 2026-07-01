@@ -139,6 +139,7 @@ model Inspecao {
   assinaturaUrl   String?   // URL do Drive (substitui assinaturaBase64)
   fotosUrls       String[]  // Array de URLs do Drive (substitui fotosEquipamento)
   videoUrl        String?   // Vídeo geral do equipamento (separado de fotosUrls)
+  driveFolderId   String?   // Pasta dedicada no Drive para evidências desta inspeção (criada no 1º upload)
   origem          String?
   destino         String?
   compressorUtilizado String?
