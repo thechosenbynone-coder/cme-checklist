@@ -90,6 +90,11 @@ contaRouter.post('/api/upload', (req, res) => {
       if (!inspecao) {
         return res.status(404).json({ error: 'Inspeção não encontrada. Sincronize antes de enviar evidências.' });
       }
+      // Mesma regra de PATCH /:id/respostas — inspeção finalizada não deve
+      // ganhar evidência nova sem uma atualização de DB/auditoria correspondente.
+      if (inspecao.status === 'CONCLUIDA' || inspecao.status === 'VALIDADA') {
+        return res.status(409).json({ error: 'Não é possível alterar uma inspeção já concluída ou validada.' });
+      }
 
       const timestamp = Date.now();
       const ext = req.file.originalname.split('.').pop() || 'bin';

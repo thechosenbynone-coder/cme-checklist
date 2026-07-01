@@ -97,6 +97,7 @@ const INSP_PASTA_INVALIDA_ID = 'insp-test-conta-pastainvalida';
 const INSP_RECUPERAVEL_ID = 'insp-test-conta-recuperavel';
 const INSP_CONCORRENCIA_ID = 'insp-test-conta-concorrencia';
 const INSP_SEM_NUMERO_ID = 'insp-test-conta-semnumero';
+const INSP_CONCLUIDA_ID = 'insp-test-conta-concluida';
 
 describe.skipIf(!HAS_DB)('POST /api/upload — pasta por inspeção', () => {
   beforeAll(async () => {
@@ -142,6 +143,18 @@ describe.skipIf(!HAS_DB)('POST /api/upload — pasta por inspeção', () => {
       update: { driveFolderId: null, numeroDocumento: null },
       create: { id: INSP_SEM_NUMERO_ID, numeroDocumento: null, driveFolderId: null, ...baseInspecao },
     });
+    await prisma.inspecao.upsert({
+      where: { id: INSP_CONCLUIDA_ID },
+      update: { status: 'CONCLUIDA', driveFolderId: null },
+      create: {
+        id: INSP_CONCLUIDA_ID,
+        numeroDocumento: 'OPE-PC-03/20260701/AAA006',
+        driveFolderId: null,
+        equipamentoId: EQUIP_ID,
+        tipo: 'OPERACIONAL',
+        status: 'CONCLUIDA',
+      },
+    });
   });
 
   afterAll(async () => {
@@ -155,6 +168,7 @@ describe.skipIf(!HAS_DB)('POST /api/upload — pasta por inspeção', () => {
             INSP_RECUPERAVEL_ID,
             INSP_CONCORRENCIA_ID,
             INSP_SEM_NUMERO_ID,
+            INSP_CONCLUIDA_ID,
           ],
         },
       },
@@ -182,6 +196,19 @@ describe.skipIf(!HAS_DB)('POST /api/upload — pasta por inspeção', () => {
       body: uploadForm(Buffer.from('conteudo'), 'image/jpeg', 'foto.jpg', 'inspecao-inexistente'),
     });
     expect(res.status).toBe(404);
+  });
+
+  it('retorna 409 quando a inspeção já está CONCLUIDA ou VALIDADA', async () => {
+    setDriveEnv();
+    const res = await fetch(`${getBase()}/api/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: uploadForm(Buffer.from('conteudo'), 'image/jpeg', 'foto.jpg', INSP_CONCLUIDA_ID),
+    });
+    expect(res.status).toBe(409);
+    // Nenhuma pasta deve ser criada nem upload tentado numa inspeção finalizada.
+    expect(mockFilesList).not.toHaveBeenCalled();
+    expect(mockFilesCreate).not.toHaveBeenCalled();
   });
 
   it('retorna 503 NOT_CONFIGURED quando faltam variáveis do Drive', async () => {
