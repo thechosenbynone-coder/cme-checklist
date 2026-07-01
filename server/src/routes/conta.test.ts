@@ -286,12 +286,22 @@ describe.skipIf(!HAS_DB)('POST /api/upload — pasta por inspeção', () => {
 
   it('só cria uma pasta quando duas requisições concorrentes chegam para a mesma inspeção', async () => {
     setDriveEnv();
-    mockFilesList.mockResolvedValue({ data: { files: [] } });
     let folderCreations = 0;
+    // Mock stateful: simula um Drive real, onde uma vez a pasta criada, uma
+    // busca por appProperties subsequente a encontra. Sem isso, o mock não
+    // reflete a 2ª camada de proteção (busca por appProperties) que existe
+    // justamente pro caso de uma requisição chegar depois do lock em memória
+    // já ter sido liberado (lock só cobre sobreposição dentro da mesma janela).
+    let createdFolderId: string | null = null;
+    mockFilesList.mockImplementation(async () => {
+      if (createdFolderId) return { data: { files: [{ id: createdFolderId, name: 'x' }] } };
+      return { data: { files: [] } };
+    });
     mockFilesCreate.mockImplementation(async (args: any) => {
       if (args.requestBody.mimeType === 'application/vnd.google-apps.folder') {
         folderCreations += 1;
-        return { data: { id: 'folder-concorrencia-001' } };
+        createdFolderId = 'folder-concorrencia-001';
+        return { data: { id: createdFolderId } };
       }
       return { data: { id: `file-concorrente-${Math.random()}` } };
     });
