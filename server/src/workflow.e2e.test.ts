@@ -87,6 +87,9 @@ afterAll(async () => {
   await prisma.inspecao.deleteMany({ where: { id: E2E_INSP_ID } });
   await prisma.itemChecklist.deleteMany({ where: { modeloId: E2E_MODELO_ID } });
   await prisma.checklistModelo.deleteMany({ where: { id: E2E_MODELO_ID } });
+  // A criação de inspeção via rota gera uma linha em InspecaoSequencia (FK
+  // RESTRICT p/ o equipamento) — limpar antes de deletar o equipamento.
+  await prisma.inspecaoSequencia.deleteMany({ where: { equipamentoId: E2E_EQUIP_ID } });
   await prisma.equipamento.deleteMany({ where: { id: E2E_EQUIP_ID } });
   if (createdOperadorId) await deleteUser(createdOperadorId);
   await deleteUser(E2E_ADMIN_ID);
