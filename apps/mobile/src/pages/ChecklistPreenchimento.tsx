@@ -139,6 +139,46 @@ const initResponses = (mod: ChecklistModelo, eq: Equipamento) => {
   return { initialRespostas, vencidos };
 };
 
+// Lock por rascunho — evita disparar POST /iniciar duas vezes em paralelo
+// (ex.: duas fotos anexadas rapidamente antes da primeira resposta chegar).
+const inspecaoCreationLocks = new Map<string, Promise<void>>();
+
+// Garante que a inspeção existe no servidor (POST /iniciar, idempotente) antes
+// de qualquer operação que dependa dela lá — hoje usada pelo upload de
+// evidência, que precisa do registro já existir para criar a pasta por
+// inspeção no Drive (numeroDocumento/equipamento vêm do banco).
+async function ensureInspecaoOnServer(draftId: string): Promise<void> {
+  const existingLock = inspecaoCreationLocks.get(draftId);
+  if (existingLock) return existingLock;
+
+  const promise = (async () => {
+    const raw = localStorage.getItem(`cme_draft_${draftId}`);
+    if (!raw) return;
+    const draft = JSON.parse(raw);
+    if (draft.serverCreated) return;
+
+    await api.inspecoes.iniciar(draftId, {
+      equipamentoId: draft.metadata.equipamentoId,
+      tipo: draft.metadata.tipo,
+      modeloId: draft.modeloId || undefined,
+      modeloVersao: draft.modeloVersao || undefined,
+      responsavelGeral: draft.metadata.responsavelGeral || undefined,
+      origem: draft.metadata.origem || undefined,
+      destino: draft.metadata.destino || undefined,
+      compressorUtilizado: draft.metadata.compressorUtilizado || undefined,
+      classificacao: draft.metadata.classificacao || undefined,
+    });
+    // Só marca depois do sucesso confirmado pelo servidor — nunca otimista.
+    draft.serverCreated = true;
+    localStorage.setItem(`cme_draft_${draftId}`, JSON.stringify(draft));
+  })().finally(() => {
+    inspecaoCreationLocks.delete(draftId);
+  });
+
+  inspecaoCreationLocks.set(draftId, promise);
+  return promise;
+}
+
 export const ChecklistPreenchimento: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -221,7 +261,11 @@ export const ChecklistPreenchimento: React.FC = () => {
   const handleUploadFile = async (file: File | Blob, filename: string): Promise<string> => {
     try {
       setUploadingFoto(true);
-      const url = await api.upload.file(file, filename);
+      if (!id) throw new Error('Inspeção inválida.');
+      // Garante que a inspeção existe no servidor antes do upload — o servidor
+      // usa numeroDocumento/equipamento dela para nomear a pasta de evidências.
+      await ensureInspecaoOnServer(id);
+      const url = await api.upload.file(file, filename, id);
       return url;
     } catch (err) {
       console.error(err);
@@ -312,21 +356,11 @@ export const ChecklistPreenchimento: React.FC = () => {
       if (!raw) return false;
       const draft = JSON.parse(raw);
 
-      if (!draft.serverCreated) {
-        await api.inspecoes.iniciar(draftId, {
-          equipamentoId: draft.metadata.equipamentoId,
-          tipo: draft.metadata.tipo,
-          modeloId: draft.modeloId || undefined,
-          modeloVersao: draft.modeloVersao || undefined,
-          responsavelGeral: draft.metadata.responsavelGeral || undefined,
-          origem: draft.metadata.origem || undefined,
-          destino: draft.metadata.destino || undefined,
-          compressorUtilizado: draft.metadata.compressorUtilizado || undefined,
-          classificacao: draft.metadata.classificacao || undefined,
-        });
-        draft.serverCreated = true;
-        localStorage.setItem(`cme_draft_${draftId}`, JSON.stringify(draft));
-      }
+      await ensureInspecaoOnServer(draftId);
+      // Se chegou aqui sem lançar, a inspeção existe no servidor — refletir no
+      // objeto local (lido antes do ensure) pra não sobrescrever com um valor
+      // desatualizado no localStorage.setItem no fim desta função.
+      draft.serverCreated = true;
 
       const alteracoes: any[] = [];
       const snaps: Record<string, string> = {};

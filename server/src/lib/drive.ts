@@ -43,14 +43,24 @@ function getDriveConfig(): DriveConfig {
   return { clientId, clientSecret, refreshToken, folderId };
 }
 
+// Chave estável do conteúdo da config — getDriveConfig() sempre retorna um
+// objeto novo, então comparar por referência (!==) nunca detecta "config
+// igual à anterior" e reconstrói o client a cada chamada. Comparar pelo
+// conteúdo é o que faz o cache "lazy" funcionar de verdade.
+function driveConfigKey(c: DriveConfig): string {
+  return `${c.clientId}:${c.clientSecret}:${c.refreshToken}:${c.folderId}`;
+}
+
 let cachedDrive: ReturnType<typeof google.drive> | null = null;
-let cachedConfig: DriveConfig | null = null;
+let cachedConfigKey: string | null = null;
 
 function getDriveClient() {
   const config = getDriveConfig();
+  const configKey = driveConfigKey(config);
 
-  // Reconstrói o client se a config mudou (ex.: variáveis atualizadas em runtime/teste).
-  if (!cachedDrive || cachedConfig !== config) {
+  // Reconstrói o client só se o conteúdo da config mudou de verdade (ex.:
+  // variáveis atualizadas em runtime/teste), não a cada chamada.
+  if (!cachedDrive || cachedConfigKey !== configKey) {
     const oauth2Client = new google.auth.OAuth2(
       config.clientId,
       config.clientSecret,
@@ -58,7 +68,7 @@ function getDriveClient() {
     );
     oauth2Client.setCredentials({ refresh_token: config.refreshToken });
     cachedDrive = google.drive({ version: 'v3', auth: oauth2Client });
-    cachedConfig = config;
+    cachedConfigKey = configKey;
   }
 
   return { drive: cachedDrive, config };
@@ -120,10 +130,15 @@ function logDriveError(operation: 'upload' | 'download', error: DriveError, raw:
 
 // ── Upload para o Drive (privado — sem permissão pública) ──────────
 // Retorna o fileId; o acesso ao conteúdo passa pelo proxy autenticado /api/files/:id.
-export async function uploadToDrive(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
-  let drive, config;
+export async function uploadToDrive(
+  buffer: Buffer,
+  filename: string,
+  mimeType: string,
+  folderId: string
+): Promise<string> {
+  let drive;
   try {
-    ({ drive, config } = getDriveClient());
+    ({ drive } = getDriveClient());
   } catch (error: any) {
     throw classifyDriveError(error);
   }
@@ -135,7 +150,7 @@ export async function uploadToDrive(buffer: Buffer, filename: string, mimeType: 
     const res = await drive.files.create({
       requestBody: {
         name: filename,
-        parents: [config.folderId],
+        parents: [folderId],
       },
       media: { mimeType, body: stream },
       fields: 'id',
@@ -173,4 +188,84 @@ export async function downloadFromDrive(fileId: string): Promise<{
     logDriveError('download', classified, error);
     throw classified;
   }
+}
+
+// ── Pasta por inspeção (organização de evidências) ──────────────────
+// Remove caracteres de controle e normaliza espaços — o Drive aceita quase
+// qualquer caractere Unicode em nomes, mas isso evita nomes ilegíveis/quebrados
+// vindos de dados inconsistentes (ex.: numeroDocumento nulo).
+function sanitizeFolderName(name: string): string {
+  return name
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+}
+
+// Escapa aspas simples para uso seguro dentro de uma query do Drive (`q: "... '<valor>' ..."`).
+function escapeDriveQueryValue(value: string): string {
+  return value.replace(/'/g, "\\'");
+}
+
+async function findOrCreateInspecaoFolder(
+  inspecaoId: string,
+  folderName: string,
+  rootFolderId: string
+): Promise<string> {
+  const { drive } = getDriveClient();
+  const safeName = sanitizeFolderName(folderName) || inspecaoId;
+  const safeId = escapeDriveQueryValue(inspecaoId);
+  const safeRoot = escapeDriveQueryValue(rootFolderId);
+
+  try {
+    const existing = await drive.files.list({
+      q: `'${safeRoot}' in parents and mimeType = 'application/vnd.google-apps.folder' and appProperties has { key='inspecaoId' and value='${safeId}' } and trashed = false`,
+      fields: 'files(id, name)',
+      pageSize: 5,
+    });
+
+    const found = existing.data.files ?? [];
+    if (found.length > 1) {
+      console.error(
+        `[INTEGRATION][DRIVE] Anomalia: ${found.length} pastas encontradas para inspecaoId=${inspecaoId}. Usando a primeira.`
+      );
+    }
+    if (found.length > 0) {
+      return found[0].id!;
+    }
+
+    const created = await drive.files.create({
+      requestBody: {
+        name: safeName,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [rootFolderId],
+        appProperties: { inspecaoId },
+      },
+      fields: 'id',
+    });
+    return created.data.id!;
+  } catch (error: any) {
+    const classified = classifyDriveError(error);
+    logDriveError('upload', classified, error);
+    throw classified;
+  }
+}
+
+// Lock em memória (por processo) — evita que duas requisições concorrentes
+// para a mesma inspeção criem duas pastas antes da primeira ser persistida no
+// banco. Não protege contra múltiplas instâncias do backend (não é o caso
+// hoje no Render, instância única); se isso mudar, precisaria de lock
+// distribuído (ex. Postgres advisory lock).
+const folderCreationLocks = new Map<string, Promise<string>>();
+
+export async function getInspecaoFolderId(inspecaoId: string, folderName: string): Promise<string> {
+  const existingLock = folderCreationLocks.get(inspecaoId);
+  if (existingLock) return existingLock;
+
+  const { config } = getDriveClient();
+  const promise = findOrCreateInspecaoFolder(inspecaoId, folderName, config.folderId).finally(() => {
+    folderCreationLocks.delete(inspecaoId);
+  });
+  folderCreationLocks.set(inspecaoId, promise);
+  return promise;
 }
