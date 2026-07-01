@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Save, Plus, Trash, ShieldCheck, ChevronRight, Camera, Pin, Check, ArrowLeft, X, CheckCircle2, XCircle } from 'lucide-react';
+import { AlertTriangle, Save, Plus, Trash, ShieldCheck, ChevronRight, Camera, Pin, Check, ArrowLeft, X, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '../components/ui/Card';
 import { StatusChip } from '../components/ui/StatusChip';
@@ -210,8 +210,8 @@ export const ChecklistPreenchimento: React.FC = () => {
 
   // Loading, Media Uploading and Video Recording State
   const [loading, setLoading] = useState(true);
-  const [, setShowLongLoadingMessage] = useState(false);
-  const [, setError] = useState('');
+  const [showLongLoadingMessage, setShowLongLoadingMessage] = useState(false);
+  const [error, setError] = useState('');
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [, setUploadingFoto] = useState(false);
   const [recordingVideo, setRecordingVideo] = useState(false);
@@ -225,7 +225,9 @@ export const ChecklistPreenchimento: React.FC = () => {
       return url;
     } catch (err) {
       console.error(err);
-      alert('Erro ao fazer upload do arquivo para o Google Drive. Tente novamente.');
+      // Único ponto de feedback do upload — os chamadores (foto, vídeo,
+      // assinatura) não devem mostrar uma segunda mensagem para o mesmo erro.
+      showFeedback('error', err instanceof Error ? err.message : 'Erro ao fazer upload do arquivo. Tente novamente.');
       throw err;
     } finally {
       setUploadingFoto(false);
@@ -251,7 +253,7 @@ export const ChecklistPreenchimento: React.FC = () => {
           const url = await handleUploadFile(blob, `video-${Date.now()}.webm`);
           onComplete(url);
         } catch (e) {
-          alert('Erro ao fazer upload do vídeo.');
+          // handleUploadFile já mostrou o banner de erro — não duplicar feedback.
         } finally {
           setRecordingVideo(false);
           setMediaRecorder(null);
@@ -876,7 +878,7 @@ export const ChecklistPreenchimento: React.FC = () => {
             assinaturaUrl = await handleUploadFile(blob, `assinatura-${Date.now()}.png`);
           } catch (e) {
             console.error('Failed to upload signature:', e);
-            alert('Erro ao fazer upload da assinatura para o Google Drive.');
+            // handleUploadFile já mostrou o banner de erro — não duplicar feedback.
             setSavingCompleted(false);
             return;
           } finally {
@@ -1042,6 +1044,14 @@ export const ChecklistPreenchimento: React.FC = () => {
   const steps = getSteps();
   const totalSteps = steps.length;
 
+  // Reconcilia currentStep sempre que o total de passos muda (modelo carrega,
+  // ou a seção de "Resolução de Pendências" é inserida/removida) — evita um
+  // índice salvo de uma sessão anterior apontar além do roteiro atual.
+  useEffect(() => {
+    if (totalSteps === 0) return;
+    setCurrentStep((prev) => Math.min(Math.max(prev, 0), totalSteps - 1));
+  }, [totalSteps]);
+
   // Estado de um passo: 'concluida' (preenchido de verdade), 'pendente'
   // (obrigatório e ainda vazio) ou 'opcional' (não obrigatório e vazio).
   const stepStatus = (stepIndex: number): 'concluida' | 'pendente' | 'opcional' => {
@@ -1171,7 +1181,9 @@ export const ChecklistPreenchimento: React.FC = () => {
     });
   };
 
-  const progressPercentage = totalSteps > 0 ? Math.round(((currentStep + 1) / totalSteps) * 100) : 0;
+  const safeCurrentStep = totalSteps > 0 ? Math.min(Math.max(currentStep, 0), totalSteps - 1) : 0;
+  const progressPercentage =
+    totalSteps > 0 ? Math.min(100, Math.max(0, Math.round(((safeCurrentStep + 1) / totalSteps) * 100))) : 0;
 
   // Active step rendering logic (stepIndex permite reuso fora do wizard,
   // ex.: na layout de cartões/seções do piloto After Cooler).
@@ -1906,6 +1918,77 @@ export const ChecklistPreenchimento: React.FC = () => {
     );
   };
 
+  // Enquanto o roteiro real (modelo) ainda não chegou, não renderizar o
+  // header de progresso nem o roteiro — antes disso, getSteps() só via as
+  // seções fixas (Materiais/Fotos/Observações/Assinatura), o que produzia um
+  // contador incoerente ("Passo 17 de 4") e um flash de lista errada.
+  if (loading) {
+    return (
+      <div className="h-[100dvh] flex flex-col bg-bg text-content overflow-hidden select-none">
+        <AppHeader title="CHECK LIST OPERACIONAL DE LIBERAÇÃO" onBack={handleBackToSelect} />
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-accent" />
+          <p className="text-xs text-muted font-semibold uppercase tracking-wider">Carregando roteiro do checklist...</p>
+          {showLongLoadingMessage && (
+            <p className="text-xs text-muted">Isso está demorando mais que o normal. Verifique sua conexão.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="h-[100dvh] flex flex-col bg-bg text-content overflow-hidden select-none">
+        <AppHeader title="CHECK LIST OPERACIONAL DE LIBERAÇÃO" onBack={handleBackToSelect} />
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
+          <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-300 text-xs p-4 rounded-xl flex items-start gap-2 max-w-sm">
+            <XCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <p>{error}</p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="bg-accent text-white font-bold text-xs px-4 py-2.5 rounded-xl min-h-[44px] active:scale-[0.98] transition hover:bg-accent/90"
+            >
+              Tentar novamente
+            </button>
+            <button
+              type="button"
+              onClick={handleBackToSelect}
+              className="border border-border text-content font-bold text-xs px-4 py-2.5 rounded-xl min-h-[44px] active:scale-[0.98] transition"
+            >
+              Voltar ao início
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!modelo || !modelo.itens || modelo.itens.length === 0) {
+    return (
+      <div className="h-[100dvh] flex flex-col bg-bg text-content overflow-hidden select-none">
+        <AppHeader title="CHECK LIST OPERACIONAL DE LIBERAÇÃO" onBack={handleBackToSelect} />
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <AlertTriangle className="h-8 w-8 text-amber-500" />
+          <p className="text-sm text-content font-semibold">
+            Nenhum roteiro de checklist configurado para este tipo de equipamento.
+          </p>
+          <p className="text-xs text-muted">Contate o gestor responsável.</p>
+          <button
+            type="button"
+            onClick={handleBackToSelect}
+            className="bg-accent text-white font-bold text-xs px-4 py-2.5 rounded-xl min-h-[44px] active:scale-[0.98] transition hover:bg-accent/90 mt-2"
+          >
+            Voltar ao início
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-[100dvh] flex flex-col bg-bg text-content overflow-hidden select-none">
       {/* Header */}
@@ -1914,7 +1997,7 @@ export const ChecklistPreenchimento: React.FC = () => {
         subtitle={`${equipamento?.codigo || ''} · ${metadata?.tipo?.replace('_', ' ') || ''}`}
         onBack={handleBackToSelect}
         progress={progressPercentage}
-        progressLabel={`Passo ${currentStep + 1} de ${totalSteps}`}
+        progressLabel={`Passo ${safeCurrentStep + 1} de ${totalSteps}`}
       />
 
       {blocoFoco === null ? (
@@ -2049,7 +2132,7 @@ export const ChecklistPreenchimento: React.FC = () => {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="bg-surface w-full max-w-lg rounded-t-3xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+              className="bg-surface w-full max-w-lg rounded-t-3xl p-5 safe-bottom-p5 space-y-4 max-h-[85vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center gap-2">
