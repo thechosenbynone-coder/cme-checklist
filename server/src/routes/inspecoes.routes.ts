@@ -8,6 +8,31 @@ import { inspecaoSchema, patchRespostasSchema, iniciarInspecaoSchema } from '../
 
 export const inspecoesRouter = Router();
 
+// Gera o número de documento rastreável OPE-PC-03/{codigoEquip}/{NNN} com
+// sequência POR equipamento. Incremento ATÔMICO e parametrizado no Postgres
+// (INSERT ... ON CONFLICT ... RETURNING) — seguro contra dois operadores
+// criando inspeções do mesmo equipamento ao mesmo tempo (cada um recebe um
+// valor distinto). Deve rodar dentro de uma transação (tx): se o create
+// seguinte falhar (ex.: P2002 por corrida no mesmo id), o rollback desfaz o
+// incremento e o número não é "queimado". Servidor é o dono do número —
+// nunca aceitar numeroDocumento vindo do cliente na criação.
+async function gerarNumeroDocumento(tx: any, equipamentoId: string): Promise<string> {
+  const equip = await tx.equipamento.findUnique({
+    where: { id: equipamentoId },
+    select: { codigo: true },
+  });
+  const codigo = equip?.codigo || 'SEM-CODIGO';
+  const linhas: { valor: number }[] = await tx.$queryRaw`
+    INSERT INTO "InspecaoSequencia" ("equipamentoId", "valor")
+    VALUES (${equipamentoId}, 1)
+    ON CONFLICT ("equipamentoId")
+    DO UPDATE SET "valor" = "InspecaoSequencia"."valor" + 1
+    RETURNING "valor"
+  `;
+  const valor = Number(linhas[0]?.valor ?? 1);
+  return `OPE-PC-03/${codigo}/${String(valor).padStart(3, '0')}`;
+}
+
 // Carrega a inspeção com respostas + os itens do modelo EXATO usado nela
 // (ISO 9001: rastreabilidade da versão do checklist). Retorna null se não
 // existir; { semModelo: true } se a inspeção não tem modeloId associado.
@@ -95,6 +120,7 @@ inspecoesRouter.get('/api/inspecoes/mine', async (req, res) => {
         data: true,
         updatedAt: true,
         tipo: true,
+        numeroDocumento: true,
         equipamento: {
           select: {
             codigo: true,
@@ -226,9 +252,8 @@ inspecoesRouter.put('/api/inspecoes/:id', async (req, res) => {
           data: dataField,
         });
       } else {
-        const numeroDocumento =
-          rest.numeroDocumento ||
-          `OPE-PC-03/${new Date().toISOString().slice(0, 10).replace(/-/g, '')}/${id.slice(-6).toUpperCase()}`;
+        // Servidor é o dono do número — ignora numeroDocumento do cliente.
+        const numeroDocumento = await gerarNumeroDocumento(tx, rest.equipamentoId);
 
         savedInspecao = await tx.inspecao.create({
           data: {
@@ -374,9 +399,8 @@ inspecoesRouter.post('/api/inspecoes', async (req, res) => {
     const { respostas, materiais, ...rest } = parsed.data;
 
     const result = await prisma.$transaction(async (tx) => {
-      const numeroDocumento =
-        rest.numeroDocumento ||
-        `OPE-PC-03/${new Date().toISOString().slice(0, 10).replace(/-/g, '')}/${(rest.id || `${Date.now()}`).slice(-6).toUpperCase()}`;
+      // Servidor é o dono do número — ignora numeroDocumento vindo do cliente.
+      const numeroDocumento = await gerarNumeroDocumento(tx, rest.equipamentoId);
 
       const createdInspecao = await tx.inspecao.create({
         data: {
@@ -623,39 +647,62 @@ inspecoesRouter.post('/api/inspecoes/:id/iniciar', async (req, res) => {
     }
     const d = parsed.data;
 
+    // Caminho rápido idempotente: já existe → devolve sem tocar no contador.
     const existing = await prisma.inspecao.findUnique({ where: { id } });
     if (existing) return res.json(existing);
 
-    const numeroDocumento = `OPE-PC-03/${new Date().toISOString().slice(0, 10).replace(/-/g, '')}/${id.slice(-6).toUpperCase()}`;
+    let created;
+    try {
+      // Transação: re-checa dentro (janela de corrida menor), gera o número
+      // sequencial e cria. Se o create falhar por P2002 (outra requisição
+      // criou o mesmo id em paralelo), o rollback desfaz o incremento do
+      // contador — tratado no catch abaixo devolvendo o registro existente.
+      created = await prisma.$transaction(async (tx) => {
+        const dup = await tx.inspecao.findUnique({ where: { id } });
+        if (dup) return { inspecao: dup, novo: false as const };
 
-    const created = await prisma.inspecao.create({
-      data: {
-        id,
-        equipamentoId: d.equipamentoId,
-        tipo: d.tipo,
-        status: 'EM_ANDAMENTO',
-        numeroDocumento,
-        modeloId: d.modeloId || null,
-        modeloVersao: d.modeloVersao ?? null,
-        responsavelGeral: d.responsavelGeral,
-        origem: d.origem || null,
-        destino: d.destino || null,
-        compressorUtilizado: d.compressorUtilizado || null,
-        classificacao: d.classificacao || null,
-        createdById: req.user?.sub || null,
-      },
-    });
+        const numeroDocumento = await gerarNumeroDocumento(tx, d.equipamentoId);
+        const insp = await tx.inspecao.create({
+          data: {
+            id,
+            equipamentoId: d.equipamentoId,
+            tipo: d.tipo,
+            status: 'EM_ANDAMENTO',
+            numeroDocumento,
+            modeloId: d.modeloId || null,
+            modeloVersao: d.modeloVersao ?? null,
+            responsavelGeral: d.responsavelGeral,
+            origem: d.origem || null,
+            destino: d.destino || null,
+            compressorUtilizado: d.compressorUtilizado || null,
+            classificacao: d.classificacao || null,
+            createdById: req.user?.sub || null,
+          },
+        });
+        return { inspecao: insp, novo: true as const };
+      });
+    } catch (error: any) {
+      // Corrida no mesmo id: a requisição concorrente venceu o create.
+      // Mantém a idempotência devolvendo o registro que ela criou (nunca 500).
+      if (error?.code === 'P2002') {
+        const dup = await prisma.inspecao.findUnique({ where: { id } });
+        if (dup) return res.json(dup);
+      }
+      throw error;
+    }
+
+    if (!created.novo) return res.json(created.inspecao);
 
     await registrarAuditoria(
       req.user?.sub,
       req.user?.nome,
       'CRIAR_INSPECAO',
       'INSPECAO',
-      created.id,
-      { status: created.status, numeroDocumento, iniciar: true }
+      created.inspecao.id,
+      { status: created.inspecao.status, numeroDocumento: created.inspecao.numeroDocumento, iniciar: true }
     );
 
-    res.status(201).json(created);
+    res.status(201).json(created.inspecao);
   } catch (error: any) {
     console.error('Error starting inspection:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
