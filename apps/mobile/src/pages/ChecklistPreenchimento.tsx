@@ -159,7 +159,10 @@ async function ensureInspecaoOnServer(draftId: string): Promise<string | undefin
     const raw = localStorage.getItem(`cme_draft_${draftId}`);
     if (!raw) return undefined;
     const draft = JSON.parse(raw);
-    if (draft.serverCreated) return draft.numeroDocumento as string | undefined;
+    // Só pula quando já temos o número. Drafts criados antes desta feature têm
+    // serverCreated=true mas numeroDocumento vazio — caem no /iniciar abaixo
+    // (idempotente: devolve o registro existente já com o número).
+    if (draft.serverCreated && draft.numeroDocumento) return draft.numeroDocumento as string | undefined;
 
     const insp = await api.inspecoes.iniciar(draftId, {
       equipamentoId: draft.metadata.equipamentoId,
