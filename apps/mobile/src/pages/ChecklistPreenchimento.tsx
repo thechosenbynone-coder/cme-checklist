@@ -49,6 +49,7 @@ interface DraftLocal {
   modeloId: string;
   modeloVersao: number;
   serverCreated?: boolean; // inspeção já criada no servidor (POST /iniciar)
+  numeroDocumento?: string; // número rastreável atribuído pelo servidor no /iniciar
 }
 
 // Reconstrói o rascunho local a partir de uma inspeção do servidor (quando não
@@ -101,6 +102,7 @@ const reconstruirDraft = (id: string, insp: any): DraftLocal => {
     modeloId: insp.modeloId || '',
     modeloVersao: insp.modeloVersao || 0,
     serverCreated: true,
+    numeroDocumento: insp.numeroDocumento || undefined,
   };
 };
 
@@ -142,23 +144,24 @@ const initResponses = (mod: ChecklistModelo, eq: Equipamento) => {
 
 // Lock por rascunho — evita disparar POST /iniciar duas vezes em paralelo
 // (ex.: duas fotos anexadas rapidamente antes da primeira resposta chegar).
-const inspecaoCreationLocks = new Map<string, Promise<void>>();
+// Resolve com o numeroDocumento atribuído pelo servidor (ou o já salvo).
+const inspecaoCreationLocks = new Map<string, Promise<string | undefined>>();
 
 // Garante que a inspeção existe no servidor (POST /iniciar, idempotente) antes
-// de qualquer operação que dependa dela lá — hoje usada pelo upload de
-// evidência, que precisa do registro já existir para criar a pasta por
-// inspeção no Drive (numeroDocumento/equipamento vêm do banco).
-async function ensureInspecaoOnServer(draftId: string): Promise<void> {
+// de qualquer operação que dependa dela lá — usada pelo upload de evidência
+// (pasta por inspeção no Drive) e pelo autosync. Devolve o numeroDocumento
+// rastreável pra exibição no app.
+async function ensureInspecaoOnServer(draftId: string): Promise<string | undefined> {
   const existingLock = inspecaoCreationLocks.get(draftId);
   if (existingLock) return existingLock;
 
   const promise = (async () => {
     const raw = localStorage.getItem(`cme_draft_${draftId}`);
-    if (!raw) return;
+    if (!raw) return undefined;
     const draft = JSON.parse(raw);
-    if (draft.serverCreated) return;
+    if (draft.serverCreated) return draft.numeroDocumento as string | undefined;
 
-    await api.inspecoes.iniciar(draftId, {
+    const insp = await api.inspecoes.iniciar(draftId, {
       equipamentoId: draft.metadata.equipamentoId,
       tipo: draft.metadata.tipo,
       modeloId: draft.modeloId || undefined,
@@ -170,8 +173,13 @@ async function ensureInspecaoOnServer(draftId: string): Promise<void> {
       classificacao: draft.metadata.classificacao || undefined,
     });
     // Só marca depois do sucesso confirmado pelo servidor — nunca otimista.
-    draft.serverCreated = true;
-    localStorage.setItem(`cme_draft_${draftId}`, JSON.stringify(draft));
+    // Relê o draft (pode ter mudado durante o await) antes de gravar.
+    const atualRaw = localStorage.getItem(`cme_draft_${draftId}`);
+    const atual = atualRaw ? JSON.parse(atualRaw) : draft;
+    atual.serverCreated = true;
+    if (insp?.numeroDocumento) atual.numeroDocumento = insp.numeroDocumento;
+    localStorage.setItem(`cme_draft_${draftId}`, JSON.stringify(atual));
+    return insp?.numeroDocumento as string | undefined;
   })().finally(() => {
     inspecaoCreationLocks.delete(draftId);
   });
@@ -221,6 +229,7 @@ export const ChecklistPreenchimento: React.FC = () => {
   }, [feedbackMsg]);
   const [materiaisDisponiveis, setMateriaisDisponiveis] = useState<Material[]>([]);
   const [materiaisUtilizados, setMateriaisUtilizados] = useState<any[]>([]);
+  const [numeroDocumento, setNumeroDocumento] = useState<string | undefined>(undefined);
   
   // Wizard Navigation State
   const [currentStep, setCurrentStep] = useState(0);
@@ -266,7 +275,8 @@ export const ChecklistPreenchimento: React.FC = () => {
       if (!id) throw new Error('Inspeção inválida.');
       // Garante que a inspeção existe no servidor antes do upload — o servidor
       // usa numeroDocumento/equipamento dela para nomear a pasta de evidências.
-      await ensureInspecaoOnServer(id);
+      const num = await ensureInspecaoOnServer(id);
+      if (num) setNumeroDocumento(num);
       const url = await api.upload.file(file, filename, id);
       return url;
     } catch (err) {
@@ -358,11 +368,13 @@ export const ChecklistPreenchimento: React.FC = () => {
       if (!raw) return false;
       const draft = JSON.parse(raw);
 
-      await ensureInspecaoOnServer(draftId);
+      const num = await ensureInspecaoOnServer(draftId);
+      if (num) setNumeroDocumento(num);
       // Se chegou aqui sem lançar, a inspeção existe no servidor — refletir no
       // objeto local (lido antes do ensure) pra não sobrescrever com um valor
       // desatualizado no localStorage.setItem no fim desta função.
       draft.serverCreated = true;
+      if (num) draft.numeroDocumento = num;
 
       const alteracoes: any[] = [];
       const snaps: Record<string, string> = {};
@@ -456,6 +468,7 @@ export const ChecklistPreenchimento: React.FC = () => {
       }
 
       setMetadata(draft.metadata);
+      if (draft.numeroDocumento) setNumeroDocumento(draft.numeroDocumento);
       if (draft.currentStep !== undefined) setCurrentStep(draft.currentStep);
       if (draft.observacoesGerais !== undefined) setObservacoesGerais(draft.observacoesGerais);
       if (draft.fotosEquipamento !== undefined) setFotosEquipamento(draft.fotosEquipamento);
@@ -2051,7 +2064,7 @@ export const ChecklistPreenchimento: React.FC = () => {
       {/* Header */}
       <AppHeader
         title="CHECK LIST OPERACIONAL DE LIBERAÇÃO"
-        subtitle={`${equipamento?.codigo || ''} · ${metadata?.tipo?.replace('_', ' ') || ''}`}
+        subtitle={`${equipamento?.codigo || ''} · ${metadata?.tipo?.replace('_', ' ') || ''}${numeroDocumento ? ` · ${numeroDocumento}` : ''}`}
         onBack={handleBackToSelect}
         progress={progressPercentage}
         progressLabel={`Passo ${safeCurrentStep + 1} de ${totalSteps}`}

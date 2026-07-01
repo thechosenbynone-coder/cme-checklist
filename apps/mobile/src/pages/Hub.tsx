@@ -28,6 +28,7 @@ interface DraftLocal {
   localUpdatedAt: string;
   modeloId: string;
   modeloVersao: number;
+  numeroDocumento?: string;
 }
 
 interface HubCache {
@@ -238,6 +239,7 @@ export const Hub: React.FC = () => {
               isLocalDraft: true,
               dirty: true,
               currentStep: local.currentStep,
+              numeroDocumento: local.numeroDocumento ?? remote.numeroDocumento,
             });
           } else {
             // Remote matches or wins
@@ -251,6 +253,7 @@ export const Hub: React.FC = () => {
               isLocalDraft: !!local,
               dirty: false,
               currentStep: local ? local.currentStep : 0,
+              numeroDocumento: local?.numeroDocumento ?? remote.numeroDocumento,
             });
           }
           // Remove processed local id
@@ -274,6 +277,7 @@ export const Hub: React.FC = () => {
           isLocalDraft: true,
           dirty: local.dirty,
           currentStep: local.currentStep,
+          numeroDocumento: local.numeroDocumento,
         });
       });
 
@@ -517,6 +521,11 @@ export const Hub: React.FC = () => {
                             </span>
                           )}
                         </div>
+                        {draft.numeroDocumento && (
+                          <div className="text-[10px] text-accent font-bold tracking-wide truncate">
+                            {draft.numeroDocumento}
+                          </div>
+                        )}
                         <div className="flex items-center gap-x-2 text-[10px] text-muted font-semibold uppercase flex-wrap gap-y-1">
                           <span>{getTipoLabel(draft.tipo)}</span>
                           <span>•</span>
@@ -577,6 +586,11 @@ export const Hub: React.FC = () => {
                               {isValidated ? 'Validado' : 'Concluído'}
                             </span>
                           </div>
+                          {item.numeroDocumento && (
+                            <div className="text-[9px] text-accent font-bold tracking-wide truncate">
+                              {item.numeroDocumento}
+                            </div>
+                          )}
                           <div className="flex items-center gap-x-2 text-[9px] text-muted font-semibold uppercase flex-wrap">
                             <span>{getTipoLabel(item.tipo)}</span>
                             <span>•</span>
