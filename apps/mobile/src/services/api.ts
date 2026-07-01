@@ -170,7 +170,16 @@ const api = {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: formData,
       });
-      if (!response.ok) throw new Error('Falha no upload');
+      if (!response.ok) {
+        let msg = 'Falha no upload';
+        try {
+          const body = await response.json();
+          if (body?.error) msg = body.error;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
       const data = await response.json();
       return data.url as string;
     },

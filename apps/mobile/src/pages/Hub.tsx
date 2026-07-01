@@ -512,8 +512,8 @@ export const Hub: React.FC = () => {
                             Rascunho
                           </span>
                           {draft.dirty && (
-                            <span className="text-[9px] bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider animate-pulse">
-                              Offline
+                            <span className="text-[9px] bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider">
+                              Alterações locais
                             </span>
                           )}
                         </div>
@@ -608,7 +608,7 @@ export const Hub: React.FC = () => {
       </div>
 
       {/* Floating circular "+" button */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+      <div className="fixed fab-bottom left-1/2 -translate-x-1/2 z-50">
         <button
           onClick={() => navigate('/novo')}
           className="h-14 w-14 rounded-full bg-accent text-white grid place-items-center shadow-lg shadow-accent/25 hover:bg-accent/90 active:scale-95 transition"
